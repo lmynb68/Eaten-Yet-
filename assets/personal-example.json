@@ -1,0 +1,335 @@
+{
+  "source": "personal",
+  "offers": [
+    {
+      "foodIds": [
+        "f0"
+      ],
+      "name": "米饭",
+      "ingredientsKnown": true,
+      "priceCents": 200,
+      "placeId": "demo_a",
+      "roles": [
+        "staple"
+      ],
+      "example": true,
+      "id": "demo_a_0",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f1"
+      ],
+      "name": "清汤面",
+      "ingredientsKnown": true,
+      "priceCents": 500,
+      "placeId": "demo_a",
+      "roles": [
+        "staple"
+      ],
+      "example": true,
+      "id": "demo_a_1",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f2",
+        "f5"
+      ],
+      "name": "番茄炒蛋",
+      "ingredientsKnown": true,
+      "priceCents": 700,
+      "placeId": "demo_a",
+      "roles": [
+        "protein"
+      ],
+      "example": true,
+      "id": "demo_a_2",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f3",
+        "f8"
+      ],
+      "name": "香菇鸡肉",
+      "ingredientsKnown": true,
+      "priceCents": 1000,
+      "placeId": "demo_a",
+      "roles": [
+        "protein"
+      ],
+      "example": true,
+      "id": "demo_a_3",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f4"
+      ],
+      "name": "家常豆腐",
+      "ingredientsKnown": true,
+      "priceCents": 600,
+      "placeId": "demo_a",
+      "roles": [
+        "protein"
+      ],
+      "example": true,
+      "id": "demo_a_4",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f6"
+      ],
+      "name": "清炒青菜",
+      "ingredientsKnown": true,
+      "priceCents": 500,
+      "placeId": "demo_a",
+      "roles": [
+        "vegetable"
+      ],
+      "example": true,
+      "id": "demo_a_5",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f7"
+      ],
+      "name": "醋溜土豆丝",
+      "ingredientsKnown": true,
+      "priceCents": 500,
+      "placeId": "demo_a",
+      "roles": [
+        "vegetable"
+      ],
+      "example": true,
+      "id": "demo_a_6",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f6",
+        "f8"
+      ],
+      "name": "香菇青菜",
+      "ingredientsKnown": true,
+      "priceCents": 600,
+      "placeId": "demo_a",
+      "roles": [
+        "vegetable"
+      ],
+      "example": true,
+      "id": "demo_a_7",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f0"
+      ],
+      "name": "米饭",
+      "ingredientsKnown": true,
+      "priceCents": 200,
+      "placeId": "demo_b",
+      "roles": [
+        "staple"
+      ],
+      "example": true,
+      "id": "demo_b_0",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f1"
+      ],
+      "name": "清汤面",
+      "ingredientsKnown": true,
+      "priceCents": 500,
+      "placeId": "demo_b",
+      "roles": [
+        "staple"
+      ],
+      "example": true,
+      "id": "demo_b_1",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f2",
+        "f5"
+      ],
+      "name": "番茄炒蛋",
+      "ingredientsKnown": true,
+      "priceCents": 700,
+      "placeId": "demo_b",
+      "roles": [
+        "protein"
+      ],
+      "example": true,
+      "id": "demo_b_2",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f3",
+        "f8"
+      ],
+      "name": "香菇鸡肉",
+      "ingredientsKnown": true,
+      "priceCents": 1000,
+      "placeId": "demo_b",
+      "roles": [
+        "protein"
+      ],
+      "example": true,
+      "id": "demo_b_3",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f4"
+      ],
+      "name": "家常豆腐",
+      "ingredientsKnown": true,
+      "priceCents": 600,
+      "placeId": "demo_b",
+      "roles": [
+        "protein"
+      ],
+      "example": true,
+      "id": "demo_b_4",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f6"
+      ],
+      "name": "清炒青菜",
+      "ingredientsKnown": true,
+      "priceCents": 500,
+      "placeId": "demo_b",
+      "roles": [
+        "vegetable"
+      ],
+      "example": true,
+      "id": "demo_b_5",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f7"
+      ],
+      "name": "醋溜土豆丝",
+      "ingredientsKnown": true,
+      "priceCents": 500,
+      "placeId": "demo_b",
+      "roles": [
+        "vegetable"
+      ],
+      "example": true,
+      "id": "demo_b_6",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    },
+    {
+      "foodIds": [
+        "f6",
+        "f8"
+      ],
+      "name": "香菇青菜",
+      "ingredientsKnown": true,
+      "priceCents": 600,
+      "placeId": "demo_b",
+      "roles": [
+        "vegetable"
+      ],
+      "example": true,
+      "id": "demo_b_7",
+      "available": true,
+      "updatedAt": "2026-10-14",
+      "portion": "1 份"
+    }
+  ],
+  "revision": 1,
+  "places": [
+    {
+      "id": "demo_a",
+      "area": "中北大学场景示例，非真实店铺",
+      "name": "示例·校园食堂窗口 A"
+    },
+    {
+      "id": "demo_b",
+      "area": "校园周边场景示例，非真实店铺",
+      "name": "示例·校边小饭店 B"
+    }
+  ],
+  "foods": [
+    {
+      "name": "米饭",
+      "id": "f0"
+    },
+    {
+      "name": "面条",
+      "id": "f1"
+    },
+    {
+      "name": "鸡蛋",
+      "id": "f2"
+    },
+    {
+      "name": "鸡肉",
+      "id": "f3"
+    },
+    {
+      "name": "豆腐",
+      "id": "f4"
+    },
+    {
+      "name": "番茄",
+      "id": "f5"
+    },
+    {
+      "name": "青菜",
+      "id": "f6"
+    },
+    {
+      "name": "土豆",
+      "id": "f7"
+    },
+    {
+      "name": "香菇",
+      "id": "f8"
+    }
+  ],
+  "schemaVersion": 1
+}
