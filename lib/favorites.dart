@@ -37,6 +37,7 @@ class FavoriteStore {
   final SharedPreferences preferences;
   List<FavoriteMeal> meals;
   bool enabled;
+  bool recoveryRequired = false;
   Future<void> _pending = Future<void>.value();
   final Map<String, int> _dishCounts = {}, _pairCounts = {};
   FavoriteStore._(this.preferences, this.meals, this.enabled) { _reindex(); }
@@ -62,8 +63,14 @@ class FavoriteStore {
     return FavoriteStore._(preferences, (j['meals'] as List)
       .map((m) => FavoriteMeal.fromJson(Map<String, dynamic>.from(m))).toList(), j['enabled'] == true);
   }
+  static Future<FavoriteStore> loadAvailable(SharedPreferences preferences) async {
+    try { return await load(preferences); }
+    on FormatException { return FavoriteStore._(preferences, [], false)..recoveryRequired = true; }
+    on TypeError { return FavoriteStore._(preferences, [], false)..recoveryRequired = true; }
+  }
   Future<void> _update(List<FavoriteMeal> Function() nextMeals, bool Function() nextEnabled) {
     final task = _pending.then((_) async {
+      if (recoveryRequired) throw StateError('收藏数据需要恢复，请先导出原始数据；未覆盖原记录');
       final next = nextMeals(), flag = nextEnabled();
       final ok = await preferences.setString(storageKey, jsonEncode({'version': 1, 'enabled': flag,
         'meals': next.map((m) => m.toJson()).toList()}));

@@ -9,6 +9,7 @@ class MenuRepository {
   final SharedPreferences preferences;
   MenuDb official, personal;
   Set<String> installedStoreIds;
+  Future<void> _pending = Future<void>.value();
   MenuRepository(this.preferences, this.official, this.personal, {Set<String>? installed})
     : installedStoreIds = {...(installed ?? official.places.map((p) => p.id).toSet())};
   MenuDb get activeOfficial {
@@ -63,15 +64,20 @@ class MenuRepository {
     if (!ok) throw StateError('保存失败，原数据库保持不变');
     official = nextOfficial; personal = nextPersonal; installedStoreIds = {...installed};
   }
-  Future<void> setStoreInstalled(String id, bool enabled) async {
+  Future<void> _enqueue(Future<void> Function() operation) {
+    final task = _pending.then((_) => operation());
+    _pending = task.catchError((Object _) {});
+    return task;
+  }
+  Future<void> setStoreInstalled(String id, bool enabled) => _enqueue(() async {
     if (!official.places.any((p) => p.id == id)) throw StateError('店铺不存在');
     final next = {...installedStoreIds};
     if (enabled) { next.add(id); } else { next.remove(id); }
     await _commit(official, personal, next);
-  }
-  Future<void> replace(MenuDb db) async {
+  });
+  Future<void> replace(MenuDb db) => _enqueue(() async {
     db.validate();
     await _commit(db.source == Source.official ? db : official,
       db.source == Source.personal ? db : personal, installedStoreIds);
-  }
+  });
 }

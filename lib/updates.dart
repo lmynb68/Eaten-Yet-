@@ -37,13 +37,20 @@ class AppRelease {
   final String version, notes, url;
   final bool prerelease;
   const AppRelease(this.version,this.notes,this.url,this.prerelease);
-  static AppRelease? latest(String text) {
+  static AppRelease? latest(String text, {bool includePrereleases = false}) {
     final list=jsonDecode(text) as List;
     final results=<AppRelease>[];
     for(final item in list) {
       if(item is! Map || item['draft'] == true) continue;
+      if (!includePrereleases && item['prerelease'] == true) continue;
       final tag=item['tag_name'];
       if(tag is! String) continue;
+      if (!includePrereleases && tag.split('+').first.contains('-')) continue;
+      final assets = item['assets'];
+      if (assets is! List || !assets.any((a) => a is Map && a['state'] == 'uploaded' &&
+        a['size'] is num && a['size'] > 0 && a['name'] is String &&
+        (a['name'] as String).endsWith('.apk') && a['browser_download_url'] is String &&
+        (a['browser_download_url'] as String).startsWith('$releasesUrl/download/$tag/'))) continue;
       try { compareVersions(tag,appVersion); } catch (_) { continue; }
       final url=item['html_url'];
       if(url is! String || !url.startsWith('$releasesUrl/tag/')) continue;

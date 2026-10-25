@@ -66,7 +66,7 @@ void main() {
       {'tag_name':'v9.0.0','draft':true,'html_url':'$releasesUrl/tag/v9.0.0'},
       {'tag_name':'v8.0.0','html_url':'https://example.com/release'},
       {'tag_name':'v0.9.0','html_url':'$releasesUrl/tag/v0.9.0'},
-      {'tag_name':'v0.11.0','html_url':'$releasesUrl/tag/v0.11.0'},
+      {'tag_name':'v0.11.0','html_url':'$releasesUrl/tag/v0.11.0','assets':[{'name':'app.apk','state':'uploaded','size':1,'browser_download_url':'$releasesUrl/download/v0.11.0/app.apk'}]},
     ]));
     expect(latest!.version,'v0.11.0');
     expect(AppRelease.latest('[]'),isNull);

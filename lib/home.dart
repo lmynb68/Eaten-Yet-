@@ -55,7 +55,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   @override
   void dispose() { mealTimer?.cancel(); WidgetsBinding.instance.removeObserver(this); budget.dispose(); super.dispose(); }
   Future<void> load() async {
-    try { final r = await MenuRepository.load(); final f = await FavoriteStore.load(r.preferences); if (mounted) setState(() { favorites = f; repo = r; mealChoice=readMealChoice(r.preferences); currentPeriod=mealChoice=="auto"?clockPeriod(DateTime.now(),readMealSchedule(r.preferences)):mealChoice; navigationOrder = readNavigationOrder(r.preferences); loadError = null; });
+    try { final r = await MenuRepository.load(); final f = await FavoriteStore.loadAvailable(r.preferences); if (mounted) setState(() { favorites = f; repo = r; mealChoice=readMealChoice(r.preferences); currentPeriod=mealChoice=="auto"?clockPeriod(DateTime.now(),readMealSchedule(r.preferences)):mealChoice; navigationOrder = readNavigationOrder(r.preferences); loadError = null; });
       if(mounted) scheduleMealClock();
       if(mounted && !hasMealChoice(r.preferences) && !mealPromptOpen) {
         WidgetsBinding.instance.addPostFrameCallback((_) {if(mounted) configureMeal(first:true);});
@@ -362,10 +362,15 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   }, '已收藏到“我的喜爱”；重复收藏不会叠加权重。');
   Widget favoritePage() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     title('我的喜爱', '保存满意的一顿，随时回看。价格为收藏时记录。'),
+    if (favorites!.recoveryRequired) ...[
+      const Text('收藏数据无法解析，原文已保留。选餐与菜单仍可使用，收藏写入暂时停用。请导出原始数据后恢复，勿卸载应用。'),
+      TextButton(onPressed: exportRecovery, child: const Text('导出原始数据')),
+      TextButton(onPressed: load, child: const Text('重新读取')),
+    ],
     SwitchListTile(key: const Key('preference-learning'), title: const LText('根据喜爱调整推荐'),
       subtitle: const LText('仅在本机学习。关闭后等概率随机，收藏仍保留。'), value: favorites!.enabled,
       onChanged: (v) => favoriteAction(() => favorites!.setEnabled(v), v ? '已开启偏好加权' : '已恢复等概率随机')),
-    if (favorites!.meals.isEmpty) const Padding(padding: EdgeInsets.all(20), child: LText('还没有喜爱记录。选好后点击“满意，收藏这一顿”。')),
+    if (!favorites!.recoveryRequired && favorites!.meals.isEmpty) const Padding(padding: EdgeInsets.all(20), child: LText('还没有喜爱记录。选好后点击“满意，收藏这一顿”。')),
     for (final meal in favorites!.meals) Card(key: ValueKey('favorite:${meal.id}'), child: Padding(
       padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         ListTile(contentPadding: EdgeInsets.zero, title: Text('${meal.storeName} · ${meal.kind}'),
