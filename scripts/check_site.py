@@ -2,7 +2,7 @@
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit, unquote
-import json, subprocess, sys, urllib.request
+import json, os, subprocess, sys, urllib.request
 ROOT=Path(__file__).resolve().parents[1]
 SITE=ROOT/'site'
 class Page(HTMLParser):
@@ -39,6 +39,8 @@ def main():
             assert a['url'].startswith('https://github.com/lmynb68/Eaten-Yet-/releases/download/'+release['tag']+'/')
         if '--online' in sys.argv:
             req=urllib.request.Request('https://api.github.com/repos/lmynb68/Eaten-Yet-/releases/tags/'+release['tag'],headers={'Accept':'application/vnd.github+json','User-Agent':'EatenYet-site-check'})
+            if os.environ.get('GITHUB_TOKEN'):
+                req.add_header('Authorization', 'Bearer '+os.environ['GITHUB_TOKEN'])
             with urllib.request.urlopen(req,timeout=30) as response:actual=json.load(response)
             assert not actual['draft'] and not actual['prerelease']
             for a in release['assets']:
