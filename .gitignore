@@ -18,3 +18,15 @@ windows/flutter/ephemeral/
 *.apk
 *.aab
 *.zip
+
+# Local photo evidence and indexes are not published.
+docs/*-sources/
+docs/*photo-index.json
+
+# Local-only photos pending QR/document review.
+assets/stores/community.jpg
+assets/stores/fengwei.jpg
+assets/stores/wenying.jpg
+assets/stores/shiyue.jpg
+
+

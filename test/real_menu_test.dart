@@ -11,10 +11,11 @@ void main() {
     recommend(candidates, MealRequest(budget: budget, mode: MealMode.mainWithSides,
       extras: extras, previous: previous, locked: locks), Random(seed));
 
-  test('real source has two restaurants, eight foodcourt windows and distinct price channels', () {
-    expect(db.places.length, 2);
-    expect(db.offers.length, 228);
-    expect(db.offers.where((o) => o.placeId == 'sf').map((o) => o.window).toSet().length, 8);
+  test('real source has nine restaurants, eight foodcourt windows and distinct price channels', () {
+    expect(db.places.length, 9);
+    expect(db.offers.length, 1634);
+    expect(db.offers.where((o) => o.placeId == 'sf').map((o) => o.window).toSet().length, 7);
+    expect(db.ricePlans.single.location, '食味坊1号窗口');
     expect(db.offers.every((o) => !o.example && !o.ingredientsKnown && o.evidence.isNotEmpty), isTrue);
     final premium = db.offers.where((o) => o.name == '优质牛肉面');
     expect(premium.map((o) => o.priceCents).toSet(), {1500,1490});

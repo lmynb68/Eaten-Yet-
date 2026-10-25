@@ -1,7 +1,7 @@
 name: eat_what
 description: 中北大学选餐框架：双菜单库、预算组合与局部重抽。
 publish_to: none
-version: 0.9.0+9
+version: 1.0.0+23
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:
@@ -10,6 +10,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   image_picker: ^1.2.4
+  http: ^1.6.0
+  url_launcher: ^6.3.3
   shared_preferences: ^2.5.3
 dev_dependencies:
   flutter_test:
@@ -18,5 +20,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/official.json
+    - assets/official-v4.json
+    - assets/official-v5.json
+    - assets/official-v6.json
+    - assets/official-v8.json
+    - assets/official-v7.json
+    - assets/rice/
     - assets/icon.png
-    - assets/stores/shiweifang.jpg
+    - assets/stores/shiweifang.webp
+    - assets/stores/community.webp
+    - assets/stores/jinmianlang.png
+    - assets/stores/baite.jpg
+    - assets/stores/baite-chinese.jpg
+    - assets/stores/zhongxiaobei.jpg

@@ -6,6 +6,7 @@ enum Source { official, personal }
 enum Scope { official, personal, merged }
 enum MealMode { mainWithSides, balancedThree }
 const kindNames = {'main': '主餐 / 套餐', 'side': '配菜 / 小食', 'drink': '饮品', 'dish': '单点菜', 'fee': '费用'};
+const stapleNames = {'rice': '米饭', 'noodles': '面条 / 米粉', 'dumplings': '饺子 / 馄饨', 'other': '其他主食', 'none': '不含主食'};
 const roleNames = {'staple': '主食', 'protein': '蛋白质类', 'vegetable': '蔬菜'};
 String money(int cents) => (cents / 100).toStringAsFixed(2);
 int? parseMoney(String value) {
@@ -15,10 +16,10 @@ int? parseMoney(String value) {
 }
 
 class Place {
-  final String id, name, area;
-  const Place(this.id, this.name, this.area);
-  factory Place.fromJson(Map<String, dynamic> j) => Place(j['id'], j['name'], j['area']);
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'area': area};
+  final String id, name, area, photo;
+  const Place(this.id, this.name, this.area, {this.photo = ''});
+  factory Place.fromJson(Map<String, dynamic> j) => Place(j['id'], j['name'], j['area'], photo: j['photo'] ?? '');
+  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'area': area, 'photo': photo};
 }
 
 class Food {
@@ -32,29 +33,40 @@ class Offer {
   final String id, placeId, name, portion, updatedAt;
   final int priceCents;
   final Set<String> roles, foodIds;
+  final Set<String> mealPeriods;
   final bool available, ingredientsKnown, example;
-  final String kind, window, channel, notes, evidence, observedAt, photo;
+  final String kind, window, channel, notes, evidence, observedAt, photo, staple;
   final bool addonOnly, alcohol;
   const Offer({required this.id, required this.placeId, required this.name,
     required this.portion, required this.priceCents, required this.roles,
     required this.foodIds, required this.updatedAt, this.available = true,
     this.ingredientsKnown = false, this.example = false, this.kind = 'dish',
     this.window = '', this.channel = 'regular', this.notes = '', this.evidence = '',
-    this.photo = '', this.observedAt = '', this.addonOnly = false, this.alcohol = false});
+    this.mealPeriods = const {'breakfast','lunch','dinner'}, this.staple = '', this.photo = '', this.observedAt = '', this.addonOnly = false, this.alcohol = false});
   factory Offer.fromJson(Map<String, dynamic> j) => Offer(id: j['id'], placeId: j['placeId'],
     name: j['name'], portion: j['portion'], priceCents: j['priceCents'],
+    mealPeriods: Set<String>.from(j['mealPeriods'] ?? ['breakfast','lunch','dinner']),
     roles: Set<String>.from(j['roles']), foodIds: Set<String>.from(j['foodIds']),
     updatedAt: j['updatedAt'], available: j['available'],
     ingredientsKnown: j['ingredientsKnown'], example: j['example'],
     kind: j['kind'] ?? 'dish', window: j['window'] ?? '', channel: j['channel'] ?? 'regular',
     notes: j['notes'] ?? '', evidence: j['evidence'] ?? '', observedAt: j['observedAt'] ?? '',
-    photo: j['photo'] ?? '', addonOnly: j['addonOnly'] ?? false, alcohol: j['alcohol'] ?? false);
+    staple: j['staple'] ?? '', photo: j['photo'] ?? '', addonOnly: j['addonOnly'] ?? false, alcohol: j['alcohol'] ?? false);
+  String get stapleType {
+    if (staple.isNotEmpty) return staple;
+    if (kind != 'main') return 'none';
+    if (RegExp('饺|馄饨').hasMatch(name)) return 'dumplings';
+    if (RegExp('面|粉|饸饹|晋运大盘鸡').hasMatch(name)) return 'noodles';
+    if (RegExp('饭|石锅|烧肉|烤肉|自选套餐').hasMatch(name)) return 'rice';
+    return 'other';
+  }
   Map<String, dynamic> toJson() => {'id': id, 'placeId': placeId, 'name': name,
+    'mealPeriods': mealPeriods.toList()..sort(),
     'portion': portion, 'priceCents': priceCents, 'roles': roles.toList()..sort(),
     'foodIds': foodIds.toList()..sort(), 'updatedAt': updatedAt,
     'available': available, 'ingredientsKnown': ingredientsKnown, 'example': example,
     'kind': kind, 'window': window, 'channel': channel, 'notes': notes, 'evidence': evidence,
-    'photo': photo, 'observedAt': observedAt, 'addonOnly': addonOnly, 'alcohol': alcohol};
+    'staple': staple, 'photo': photo, 'observedAt': observedAt, 'addonOnly': addonOnly, 'alcohol': alcohol};
 }
 
 class MenuDb {
@@ -70,7 +82,7 @@ class MenuDb {
   factory MenuDb.decode(String text, Source expected) {
     if (text.length > 12000000) throw const FormatException('数据包超过 12 MB');
     final j = jsonDecode(text) as Map<String, dynamic>;
-    if (![1, 2, 3].contains(j['schemaVersion']) || j['source'] != expected.name) {
+    if (![1, 2, 3, 4].contains(j['schemaVersion']) || j['source'] != expected.name) {
       throw const FormatException('数据版本或库类型不匹配');
     }
     final db = MenuDb(source: expected, revision: j['revision'],
@@ -82,7 +94,7 @@ class MenuDb {
     return db;
   }
   void validate() {
-    if (offers.fold<int>(0, (n, o) => n + o.photo.length) > 10000000) throw const FormatException('照片总量超过10MB，请移除部分照片');
+    if (offers.fold<int>(0, (n, o) => n + o.photo.length) + places.fold<int>(0, (n, p) => n + p.photo.length) > 10000000) throw const FormatException('照片总量超过10MB，请移除部分照片');
     void ids(List<String> values) {
       if (values.any((s) => s.trim().isEmpty) || values.toSet().length != values.length) {
         throw const FormatException('编号为空或重复');
@@ -92,14 +104,19 @@ class MenuDb {
     if (ricePlans.length > 100) throw const FormatException('套餐模板最多100个');
     for (final plan in ricePlans) { plan.validate(); }
     ids(places.map((e) => e.id).toList()); ids(foods.map((e) => e.id).toList()); ids(offers.map((e) => e.id).toList());
-    if (revision < 1 || offers.length > 500 || places.length > 200 || foods.length > 2000) {
-      throw const FormatException('版本无效或超过原型容量（500 道菜）');
+    if (revision < 1 || offers.length > 2000 || places.length > 200 || foods.length > 2000) {
+      throw const FormatException('版本无效或超过菜单容量（2000 个售卖项）');
     }
     if (places.any((p) => p.name.trim().isEmpty) || foods.any((f) => f.name.trim().isEmpty)) {
       throw const FormatException('店铺或食材名称为空');
     }
     final placeIds = places.map((e) => e.id).toSet(), foodIds = foods.map((e) => e.id).toSet();
+    for (final p in places) {
+      if (p.photo.length > 400000 || (p.photo.isNotEmpty && base64Decode(p.photo).length > 300000)) throw const FormatException('店铺照片过大或格式无效');
+    }
     for (final o in offers) {
+      if (o.mealPeriods.isEmpty || !{'breakfast','lunch','dinner'}.containsAll(o.mealPeriods)) throw const FormatException('餐次分类无效');
+      if (o.staple.isNotEmpty && !stapleNames.containsKey(o.staple)) throw const FormatException('主食分类无效');
       if (o.photo.length > 400000 || (o.photo.isNotEmpty && base64Decode(o.photo).length > 300000)) throw const FormatException('照片过大或格式无效');
       if (!placeIds.contains(o.placeId) || !foodIds.containsAll(o.foodIds) ||
           o.priceCents <= 0 || o.priceCents > 10000000 || o.name.trim().isEmpty ||
@@ -111,7 +128,7 @@ class MenuDb {
       }
     }
   }
-  String encode() => const JsonEncoder.withIndent('  ').convert({'schemaVersion': 3,
+  String encode() => const JsonEncoder.withIndent('  ').convert({'schemaVersion': ricePlans.any((p) => p.pricedByDish) ? 4 : 3,
     'ricePlans': ricePlans.map((p) => p.toJson()).toList(),
     'source': source.name, 'revision': revision, 'places': places.map((e) => e.toJson()).toList(),
     'foods': foods.map((e) => e.toJson()).toList(), 'offers': offers.map((e) => e.toJson()).toList()});

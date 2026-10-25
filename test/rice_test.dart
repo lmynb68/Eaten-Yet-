@@ -3,6 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:eat_what/rice.dart';
 
 void main() {
+  test('schemes enforce meat count, budget, locks and exclude unknown dishes', () {
+    final p = RicePlan(id: 'typed', name: '测试', location: '测试', priceCents: 100,
+      labels: ['菜','菜','菜'], options: List.generate(3, (_) => ['蛋','菜A','菜B','肉A','肉B','未知']),
+      dishTypes: {'蛋':'veg','菜A':'veg','菜B':'veg','肉A':'meat','肉B':'meat'},
+      dishPrices: {'蛋':100,'菜A':100,'菜B':100,'肉A':200,'肉B':200,'未知':100});
+    expect(RicePlan.fromJson(p.toJson()).dishTypes, p.dishTypes);
+    for (var count=0; count<=2; count++) {
+      for (var seed=0; seed<10; seed++) {
+        final result = randomRice(p, 600, ['蛋',null,null], {0}, Random(seed), meatCount: count);
+        expect(result.dishes, isNotNull);
+        expect(result.dishes![0], '蛋');
+        expect(result.dishes!.where((n) => riceDishType(p,n!) == 'meat').length, count);
+        expect(result.dishes, isNot(contains('未知')));
+        expect(p.totalPrice(result.dishes!), lessThanOrEqualTo(600));
+      }
+    }
+    expect(randomRice(p, 300, [null,null,null], {}, Random(1), meatCount: 2).dishes, isNull);
+    expect(randomRice(p, 600, ['肉A',null,null], {0}, Random(1), meatCount: 0).dishes, isNull);
+    expect(randomRice(p, 900, [null,null,null], {}, Random(1), meatCount: 3).dishes, isNull);
+  });
+
   const plan = RicePlan(id: 'test', name: '测试套餐（非真实菜单）', location: '测试窗口',
     priceCents: 1100, labels: ['大荤','小荤','素菜'],
     options: [['测试荤菜A','测试荤菜B'],['测试小荤A','测试小荤B'],['测试素菜A','测试素菜B']]);

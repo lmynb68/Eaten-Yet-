@@ -1,5 +1,5 @@
 ﻿param(
-  [ValidateSet('check','doctor','windows','android','run-windows')][string]$Target='check',
+  [ValidateSet('check','doctor','windows','android','run-windows','android-release')][string]$Target='check',
   [string]$Flutter='',
   [switch]$Online
 )
@@ -12,11 +12,7 @@ if (!$Flutter) {
   $found=Get-Command flutter -ErrorAction SilentlyContinue
   if ($found) { $Flutter=$found.Source }
 }
-if (!$Flutter -or !(Test-Path -LiteralPath $Flutter)) { throw '找不到 Flutter SDK。设置 FLUTTER_ROOT，或使用 -Flutter 指定 flutter.bat。' }
-# Reuse the existing mirror cache without changing machine-wide settings.
-if ($env:PUB_CACHE -and !$env:PUB_HOSTED_URL -and (Test-Path -LiteralPath (Join-Path $env:PUB_CACHE 'hosted\pub.flutter-io.cn'))) {
-  $env:PUB_HOSTED_URL='https://pub.flutter-io.cn'
-}
+if (!$Flutter -or !(Test-Path -LiteralPath $Flutter)) { throw '请设置 FLUTTER_ROOT，或使用 -Flutter 指定本机 flutter.bat。' }
 New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'logs') -Force | Out-Null
 Start-Transcript -LiteralPath (Join-Path $PSScriptRoot "logs\$Target.txt") -Force
 function Invoke-Flutter([string[]]$Arguments) {
@@ -58,6 +54,21 @@ try {
     Copy-Item -LiteralPath $apk -Destination $delivery -Force
     Write-Host ('APK: '+$delivery)
     Write-Host ('SHA256: '+(Get-FileHash -LiteralPath $delivery -Algorithm SHA256).Hash)
+  }
+  if ($Target -eq 'android-release') {
+    $deliveryRoot=Split-Path -Parent $PSScriptRoot
+    Invoke-Flutter @('build','apk','--no-pub','--release','--target-platform','android-arm64')
+    $apk=Join-Path $PSScriptRoot 'build\app\outputs\flutter-apk\app-release.apk'
+    $arm64=Join-Path $deliveryRoot 'EatenYet-v1.0.0-android-arm64.apk'
+    Copy-Item -LiteralPath $apk -Destination $arm64 -Force
+    Invoke-Flutter @('build','apk','--no-pub','--release')
+    $universal=Join-Path $deliveryRoot 'EatenYet-v1.0.0-android-universal.apk'
+    Copy-Item -LiteralPath $apk -Destination $universal -Force
+    foreach($file in @($arm64,$universal)) {
+      Write-Host ('APK: '+$file)
+      Write-Host ('Bytes: '+(Get-Item -LiteralPath $file).Length)
+      Write-Host ('SHA256: '+(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash)
+    }
   }
   if ($Target -eq 'run-windows') { Invoke-Flutter @('run','--no-pub','-d','windows') }
 } catch { Write-Host ('FAILED: '+$_.Exception.Message); exit 1 }

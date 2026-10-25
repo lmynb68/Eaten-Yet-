@@ -70,7 +70,7 @@ void main() {
     expect(Offer.fromJson(legacy).photo,isEmpty);
   });
   testWidgets('language switches on screen and survives a new controller', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'eat_what.meal_period':'lunch',});
     final controller=LanguageController();
     await controller.load();
     await tester.pumpWidget(LanguageScope(controller: controller, child: const MaterialApp(home: SettingsPage())));

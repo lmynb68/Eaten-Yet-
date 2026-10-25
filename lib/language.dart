@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'update_page.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LanguageController extends ChangeNotifier {
@@ -32,10 +34,11 @@ String tr(BuildContext context, String value) {
   if (value.startsWith('导入') || value.startsWith('导出')) {
     return value.replaceAll('导入','Import ').replaceAll('导出','Export ').replaceAll('官方库','official menu').replaceAll('个人库','personal menu');
   }
+  if (value.startsWith('已选菜品＋米饭：')) return value.replaceFirst('已选菜品＋米饭：','Selected dishes + rice: ');
   if (value.contains(' · ') || value.startsWith('版本 ') || value.startsWith('校验通过：')) {
     for (final pair in const {
       '官方库':'Official', '个人库':'Personal', '官方 ·':'Official ·','个人 ·':'Personal ·',
-      '版本 ':'Version ', ' 家店':' stores',' 个售卖项':' items','整套 ':'Set ', '（含米饭）':'(rice included)',
+      '版本 ':'Version ', ' 家店':' stores',' 个售卖项':' items','按菜计价':'Dish prices + rice','米饭 ¥':'Rice ¥','（免费续饭）':' (free refills)','已选菜品＋米饭：':'Selected dishes + rice: ','整套 ':'Set ', '（含米饭）':'(rice included)',
       '主餐 / 套餐':'Meal / set','配菜 / 小食':'Side / snack','单点菜':'Dish','饮品':'Drink','费用':'Fee',
       '抖音团购':'Douyin offer','已下架':'Unavailable','在售':'Available','暂不可选':'Unavailable','示例':'Example',
       '价格记录：':'Price recorded: ','库内标记：':'Recorded status: ','（非实时）':' (not live)',
@@ -52,15 +55,17 @@ class LText extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(tr(context,data),style:style,overflow:overflow);
 }
-void openSettings(BuildContext context) {
-  Navigator.of(context).push(MaterialPageRoute<void>(builder: (ctx) => const SettingsPage()));
+void openSettings(BuildContext context, {Future<void> Function(BuildContext)? onMealSettings}) {
+  Navigator.of(context).push(MaterialPageRoute<void>(builder: (ctx) => SettingsPage(onMealSettings:onMealSettings)));
 }
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({super.key});
+  final Future<void> Function(BuildContext)? onMealSettings;
+  const SettingsPage({super.key,this.onMealSettings});
   @override
   Widget build(BuildContext context) {
     final controller = context.dependOnInheritedWidgetOfExactType<LanguageScope>()!.notifier!;
     return Scaffold(appBar: AppBar(title: const LText('设置')), body: ListView(padding: const EdgeInsets.all(24), children: [
+      if(onMealSettings!=null) ListTile(leading:const Icon(Icons.schedule),title:const Text('餐次设置'),subtitle:const Text('跟随系统时间 / 手动模式'),onTap:()=>onMealSettings!(context)),
       const LText('语言'), const SizedBox(height: 16),
       for (final item in const [('zh','简体中文'),('en','English')]) ListTile(
         title: Text(item.$2), trailing: controller.code == item.$1 ? const Icon(Icons.check) : null,
@@ -68,10 +73,110 @@ class SettingsPage extends StatelessWidget {
           if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: LText('保存失败，请重试')));
         }}),
       const SizedBox(height: 24), const LText('店名、菜名及个人输入保留原文。'),
+      const SizedBox(height: 24), const Divider(),
+      ListTile(leading: const Icon(Icons.system_update), title: const LText('官方最新版本'),
+        trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const UpdatePage()))),
+      ListTile(
+        leading: const Icon(Icons.code),
+        title: const LText('GitHub 仓库与贡献'),
+        subtitle: const LText('查看项目地址，欢迎反馈与贡献'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => const RepositoryPage())),
+      ),
     ]));
   }
 }
+
+class RepositoryPage extends StatelessWidget {
+  static const repositoryUrl = 'https://github.com/lmynb68/Eaten-Yet-';
+  const RepositoryPage({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const LText('GitHub 仓库与贡献')),
+    body: ListView(padding: const EdgeInsets.all(24), children: [
+      const Icon(Icons.favorite_outline, size: 48),
+      const SizedBox(height: 20),
+      LText('感谢每一位贡献者', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
+      const LText('感谢你使用「吃什么」！每一次问题反馈、菜单补充、价格纠正和代码贡献，都让它变得更好。欢迎在 GitHub 提出建议、提交 Issue 或 Pull Request，一起让中北的每一顿更好选。'),
+      const SizedBox(height: 24),
+      const SelectableText(repositoryUrl),
+      const SizedBox(height: 12),
+      FilledButton.icon(icon: const Icon(Icons.copy), label: const LText('复制仓库地址'),
+        onPressed: () async {
+          try {
+            await Clipboard.setData(const ClipboardData(text: repositoryUrl));
+            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: LText('仓库地址已复制，可粘贴到浏览器打开')));
+          } catch (_) {
+            if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: LText('复制失败，可长按地址手动复制')));
+          }
+        }),
+    ]),
+  );
+}
 const _en = <String,String>{
+  '长按拖动调整顺序':'Hold and drag to reorder',
+  '导航顺序保存失败，请重试':'Could not save navigation order. Please try again.',
+  '筛选餐品':'Filter food', '菜单来源':'Menu source', '按条件查找':'Find by filters',
+  '按你的想法挑':'Make it yours', '全部菜单':'All menus',
+  '筛选':'Filters', '重置':'Reset',
+  '我的喜爱':'Favorites', '米饭选菜':'Rice dishes',
+  '满意，收藏这一顿':'Like and save this meal',
+  '根据喜爱调整推荐':'Personalize using favorites',
+  '仅在本机学习。关闭后等概率随机，收藏仍保留。':'Learn on this device only. Turn off for uniform random picks; favorites are kept.',
+  '先选主菜，再搭配同店小食。':'Pick a main, then a snack from the same store.',
+  '所选店铺没有米饭选菜。':'No rice dishes in the selected stores.',
+  '请先回到米饭选菜，选好主菜。':'Choose rice dishes before adding a snack.',
+  '只买小食（结束当前搭配）':'Snack only (end this meal)',
+  '单独买小食：可先筛选店铺，不会与另一顿饭自动合并。':'Buying a snack separately: filter stores first. It will not be added to another meal.',
+  '还没有喜爱记录。选好后点击“满意，收藏这一顿”。':'No favorites yet. Choose a meal, then like and save it.',
+  '保存满意的一顿，随时回看。价格为收藏时记录。':'Save meals you like. Prices are snapshots from when you saved them.',
+  "主食分类":"Staple type",
+  "米饭":"Rice",
+  "面条 / 米粉":"Noodles / rice noodles",
+  "饺子 / 馄饨":"Dumplings / wontons",
+  "其他主食":"Other staples",
+  "不含主食":"No staple",
+  "全部主食":"All staple types",
+  "添加个人店铺":"Add personal store",
+  "给这家店添加菜品":"Add a dish to this store",
+  "请填写店铺名称":"Enter a store name",
+  "同名同位置的店铺已存在":"A store with this name and location already exists",
+  "管理官方店铺":"Manage official stores",
+  "获取官方店铺更新":"Refresh official catalog",
+  "从我的菜单移除":"Remove from my menu",
+  "添加到我的菜单":"Add to my menu",
+  "已保存店铺选择":"Store selection saved",
+  "添加需要的店铺到我的菜单；移除后不再参与推荐。店铺目录保留，可随时重新添加。个人菜品不受影响。":"Add stores to your menu. Removed stores are excluded from recommendations and can be added again. Personal dishes are unaffected.",
+  "操作失败，请检查网络后重试；原数据保留。":"Operation failed. Check your connection and retry. Existing data is kept.",
+  "官方菜单已是最新":"Official catalog is up to date",
+  "官方目录已更新；已移除的店铺不会自动添加，新店铺请自行选择。":"Catalog updated. Removed stores stay removed. Choose new stores to add them.",
+  "官方最新版本":"Official latest version",
+  "当前版本":"Installed version",
+  "检查更新":"Check for updates",
+  "测试版本":"Pre-release",
+  "打开官方发布页面":"Open official releases",
+  "复制地址":"Copy URL",
+  "点击检查以获取官方最新版本；不会在启动时弹窗。":"Check for the latest official release. No startup pop-ups.",
+  "暂无已发布版本":"No published releases yet",
+  "发现新版本，可自行选择是否更新。":"A newer version is available. Updating is optional.",
+  "当前版本已是最新或高于已发布版本":"Your version is up to date or newer than published releases",
+  "检查失败，请检查网络或访问发布页面。":"Check failed. Check your connection or visit releases.",
+  "无法打开浏览器，请复制地址后打开。":"Could not open a browser. Copy and open the URL manually.",
+  "iPhone 请通过发布说明中的 App Store 或 TestFlight 链接更新；安卓安装包无法用于 iPhone。":"On iPhone, use an App Store or TestFlight link provided in the release notes. Android packages cannot run on iPhone.",
+  "打开发布页面后下载适用的安装包，并按系统提示安装。更新由你决定，不会自动安装。安卓覆盖安装需相同签名。":"Download a compatible package from the release page and follow system prompts. Updates are optional. Android upgrades require matching signatures.",
+  "基础数据来自10月15日；社区食堂更新于10月16日。预算不含打包、配送费用。":"Base data: October 15. Community canteen: October 16. Packaging and delivery are excluded.",
+
+  'GitHub 仓库与贡献':'GitHub & contributions',
+  '查看项目地址，欢迎反馈与贡献':'Project repository, feedback and contributions',
+  '感谢每一位贡献者':'Thank you to every contributor',
+  '感谢你使用「吃什么」！每一次问题反馈、菜单补充、价格纠正和代码贡献，都让它变得更好。欢迎在 GitHub 提出建议、提交 Issue 或 Pull Request，一起让中北的每一顿更好选。':'Thank you for using Eat What! Every bug report, menu addition, price correction and code contribution makes it better. Share your suggestions, open an issue or submit a pull request on GitHub. Together, we can make choosing a meal at NUC easier.',
+  '复制仓库地址':'Copy repository URL',
+  '仓库地址已复制，可粘贴到浏览器打开':'URL copied. Paste it into your browser to open the repository.',
+  '复制失败，可长按地址手动复制':'Could not copy. Touch and hold the URL to copy it manually.',
   '筛选店铺和主餐':'Filter stores and meals',
   '已勾选主餐':'Selected meals',
   '可多选店铺，或展开店铺勾选主餐；只从勾选项中手选和随机。':'Select multiple stores, or expand a store to select meals. Both manual and random choices use this selection.',
