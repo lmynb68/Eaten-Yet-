@@ -22,6 +22,14 @@ class MenuRepository {
         return key != null && installedStoreIds.contains(key.substring('official:'.length));
       }).toList());
   }
+  // Recovery export deliberately avoids decoding or overwriting saved values.
+  // This is a diagnostic snapshot, not a normal menu-library import package.
+  static Future<String> exportRecoveryData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs.getKeys().where((key) => key.startsWith('eat_what.')).toList()..sort();
+    return jsonEncode({'format': 'eat-what-recovery-v1',
+      'values': {for (final key in keys) key: prefs.get(key)}});
+  }
   static Future<MenuRepository> load() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString(storageKey);

@@ -65,6 +65,7 @@ try {
     $universal=Join-Path $deliveryRoot 'EatenYet-v1.0.0-android-universal.apk'
     Copy-Item -LiteralPath $apk -Destination $universal -Force
     foreach($file in @($arm64,$universal)) {
+      & (Join-Path $PSScriptRoot 'scripts/verify-apk.ps1') -Apk $file
       Write-Host ('APK: '+$file)
       Write-Host ('Bytes: '+(Get-Item -LiteralPath $file).Length)
       Write-Host ('SHA256: '+(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash)

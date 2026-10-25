@@ -63,6 +63,22 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     }
     catch (e) { if (mounted) setState(() => loadError = '菜单加载失败，未覆盖本地数据：$e'); }
   }
+  Future<void> exportRecovery() async {
+    try {
+      final text = await MenuRepository.exportRecoveryData();
+      if (!mounted) return;
+      await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('导出原始数据'),
+        content: const Text('此恢复文件包含本机个人数据，请私下保存，不要提交到公开反馈。它不修改现有数据，也不能直接当作菜单库导入。'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          TextButton(onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: text));
+            if (ctx.mounted) Navigator.pop(ctx);
+          }, child: const Text('复制原始数据'))]));
+    } catch (_) {
+      if (mounted) setState(() => loadError = '无法读取原始数据，请保留应用，不要卸载或清除数据。');
+    }
+  }
   Future<void> reorderNavigation(int oldIndex, int newIndex) async {
     if (busy || savingNavigation) return;
     if (oldIndex == newIndex) return;
@@ -633,7 +649,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (repo == null) return Scaffold(body: Center(child: loadError == null ? const CircularProgressIndicator() :
-      Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [LText(loadError!), TextButton(onPressed: load, child: const LText('重试'))]))));
+      Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [LText(loadError!), TextButton(onPressed: load, child: const LText('重试')), TextButton(onPressed: exportRecovery, child: const Text('导出原始数据'))]))));
     final wide = MediaQuery.sizeOf(context).width >= 850;
     final page = tab == 1
       ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 914),

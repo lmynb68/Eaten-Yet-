@@ -2,7 +2,7 @@ name: Deploy project website
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/project-pages.yml']
+    paths: ['site/**', 'scripts/check_site.py', '.github/workflows/project-pages.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,10 +19,22 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate website and release metadata
+        run: python scripts/check_site.py --online
+      - name: Prepare website without legacy installation packages
+        run: |
+          mkdir -p _site
+          rsync -a --exclude='downloads/' site/ _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:
-          path: site
+          path: _site
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
