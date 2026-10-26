@@ -29,6 +29,11 @@ void main() {
     expect(UpdateAsset.parse(asset('x.apk', digest: false), 'v1.0.2')!.sha256, isNull);
     expect(UpdateAsset.parse({...asset('x.apk'), 'browser_download_url': 'https://evil.invalid/app.apk'}, 'v1.0.2'), isNull);
   });
+  test('encoded build tags are accepted only for the exact repository and tag', () {
+    expect(isReleaseAssetUrl('$releasesUrl/download/v1.0.1%2B26/app.apk', 'v1.0.1+26'), isTrue);
+    expect(isReleaseAssetUrl('$releasesUrl/download/v1.0.1%2B25/app.apk', 'v1.0.1+26'), isFalse);
+    expect(isReleaseAssetUrl('https://github.com.evil.invalid/lmynb68/Eaten-Yet-/releases/download/v1.0.1/app.apk', 'v1.0.1'), isFalse);
+  });
   test('download streams to file and reports actual bytes', () async {
     final file = File('${dir.path}/update.apk');
     final progress = <int>[];

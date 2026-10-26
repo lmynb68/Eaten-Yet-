@@ -36,7 +36,7 @@ def main():
         for a in release['assets']:
             assert len(a['sha256'])==64 and all(c in '0123456789abcdef' for c in a['sha256'])
             assert a['bytes']>0 and a['abi']
-            assert a['url'].startswith('https://github.com/lmynb68/Eaten-Yet-/releases/download/'+release['tag']+'/')
+            assert unquote(a['url']).startswith('https://github.com/lmynb68/Eaten-Yet-/releases/download/'+release['tag']+'/')
         if '--online' in sys.argv:
             req=urllib.request.Request('https://api.github.com/repos/lmynb68/Eaten-Yet-/releases/tags/'+release['tag'],headers={'Accept':'application/vnd.github+json','User-Agent':'EatenYet-site-check'})
             if os.environ.get('GITHUB_TOKEN'):

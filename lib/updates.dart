@@ -59,7 +59,7 @@ class AppRelease {
       if (assets is! List || !assets.any((a) => a is Map && a['state'] == 'uploaded' &&
         a['size'] is num && a['size'] > 0 && a['name'] is String &&
         (a['name'] as String).endsWith('.apk') && a['browser_download_url'] is String &&
-        (a['browser_download_url'] as String).startsWith('$releasesUrl/download/$tag/'))) continue;
+        isReleaseAssetUrl(a['browser_download_url'] as String, tag))) continue;
       try { compareVersions(tag,appVersion); } catch (_) { continue; }
       final url=item['html_url'];
       if(url is! String || !url.startsWith('$releasesUrl/tag/')) continue;
@@ -79,10 +79,18 @@ class UpdateAsset {
     if (value is! Map || value['state'] != 'uploaded') return null;
     final name = value['name'], url = value['browser_download_url'], size = value['size'];
     if (name is! String || !name.endsWith('.apk') || url is! String ||
-        !url.startsWith('$releasesUrl/download/$tag/') || size is! int || size <= 0 || size > 200 * 1024 * 1024) return null;
+        !isReleaseAssetUrl(url, tag) || size is! int || size <= 0 || size > 200 * 1024 * 1024) return null;
     final digest = value['digest'];
     final hash = digest is String && RegExp(r'^sha256:[0-9a-fA-F]{64}$').hasMatch(digest)
         ? digest.substring(7).toLowerCase() : null;
     return UpdateAsset(name, url, size, hash);
   }
+}
+
+bool isReleaseAssetUrl(String url, String tag) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.scheme != 'https' || uri.host != 'github.com' || uri.port != 443 || uri.userInfo.isNotEmpty) return false;
+  final parts = uri.pathSegments;
+  return parts.length == 6 && parts[0] == 'lmynb68' && parts[1] == 'Eaten-Yet-' &&
+      parts[2] == 'releases' && parts[3] == 'download' && parts[4] == tag && parts[5].endsWith('.apk');
 }
