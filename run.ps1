@@ -1,5 +1,5 @@
 ﻿param(
-  [ValidateSet('check','doctor','windows','android','run-windows','android-release')][string]$Target='check',
+  [ValidateSet('check','doctor','android','android-release')][string]$Target='check',
   [string]$Flutter='',
   [switch]$Online
 )
@@ -45,7 +45,6 @@ try {
   else { Invoke-Flutter @('pub','get','--offline') }
   Invoke-Flutter @('analyze','--no-pub','lib','test')
   Invoke-Flutter @('test','--no-pub')
-  if ($Target -eq 'windows') { Invoke-Flutter @('build','windows','--no-pub','--release') }
   if ($Target -eq 'android') {
     Invoke-Flutter @('build','apk','--no-pub','--debug')
     $apk=Join-Path $PSScriptRoot 'build\app\outputs\flutter-apk\app-debug.apk'
@@ -74,6 +73,5 @@ try {
       Write-Host ('SHA256: '+(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash)
     }
   }
-  if ($Target -eq 'run-windows') { Invoke-Flutter @('run','--no-pub','-d','windows') }
 } catch { Write-Host ('FAILED: '+$_.Exception.Message); exit 1 }
 finally { Stop-Transcript }
