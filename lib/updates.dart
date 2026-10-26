@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 const appVersion = '1.0.0';
-const appBuild = 23;
+const appBuild = 25;
 const releasesUrl = 'https://github.com/lmynb68/Eaten-Yet-/releases';
 const catalogUrl = 'https://raw.githubusercontent.com/lmynb68/Eaten-Yet-/main/assets/official.json';
 
@@ -36,7 +36,16 @@ int compareVersions(String a, String b) {
 class AppRelease {
   final String version, notes, url;
   final bool prerelease;
-  const AppRelease(this.version,this.notes,this.url,this.prerelease);
+  final List<UpdateAsset> assets;
+  const AppRelease(this.version,this.notes,this.url,this.prerelease, [this.assets = const []]);
+  UpdateAsset? installer(List<String> abis) {
+    final verified = assets.where((a) => a.sha256 != null);
+    if (abis.contains('arm64-v8a')) {
+      for (final a in verified) { if (a.name.endsWith('-android-arm64.apk')) return a; }
+    }
+    for (final a in verified) { if (a.name.endsWith('-android-universal.apk')) return a; }
+    return null;
+  }
   static AppRelease? latest(String text, {bool includePrereleases = false}) {
     final list=jsonDecode(text) as List;
     final results=<AppRelease>[];
@@ -54,9 +63,26 @@ class AppRelease {
       try { compareVersions(tag,appVersion); } catch (_) { continue; }
       final url=item['html_url'];
       if(url is! String || !url.startsWith('$releasesUrl/tag/')) continue;
-      results.add(AppRelease(tag,item['body'] is String ? item['body'] : '',url,item['prerelease'] == true));
+      results.add(AppRelease(tag,item['body'] is String ? item['body'] : '',url,item['prerelease'] == true, assets.map((a) => UpdateAsset.parse(a, tag)).whereType<UpdateAsset>().toList()));
     }
     results.sort((a,b)=>compareVersions(b.version,a.version));
     return results.firstOrNull;
+  }
+}
+
+class UpdateAsset {
+  final String name, url;
+  final int size;
+  final String? sha256;
+  const UpdateAsset(this.name, this.url, this.size, this.sha256);
+  static UpdateAsset? parse(dynamic value, String tag) {
+    if (value is! Map || value['state'] != 'uploaded') return null;
+    final name = value['name'], url = value['browser_download_url'], size = value['size'];
+    if (name is! String || !name.endsWith('.apk') || url is! String ||
+        !url.startsWith('$releasesUrl/download/$tag/') || size is! int || size <= 0 || size > 200 * 1024 * 1024) return null;
+    final digest = value['digest'];
+    final hash = digest is String && RegExp(r'^sha256:[0-9a-fA-F]{64}$').hasMatch(digest)
+        ? digest.substring(7).toLowerCase() : null;
+    return UpdateAsset(name, url, size, hash);
   }
 }

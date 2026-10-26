@@ -57,12 +57,15 @@ try {
   }
   if ($Target -eq 'android-release') {
     $deliveryRoot=Split-Path -Parent $PSScriptRoot
+    $versionLine=Get-Content (Join-Path $PSScriptRoot 'pubspec.yaml') | Where-Object { $_ -match '^version:' } | Select-Object -First 1
+    if($versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)'){throw 'Invalid package version.'}
+    $releaseVersion=$Matches[1]; $releaseBuild=$Matches[2]
     Invoke-Flutter @('build','apk','--no-pub','--release','--target-platform','android-arm64')
     $apk=Join-Path $PSScriptRoot 'build\app\outputs\flutter-apk\app-release.apk'
-    $arm64=Join-Path $deliveryRoot 'EatenYet-v1.0.0-android-arm64.apk'
+    $arm64=Join-Path $deliveryRoot "EatenYet-v$releaseVersion-build$releaseBuild-android-arm64.apk"
     Copy-Item -LiteralPath $apk -Destination $arm64 -Force
     Invoke-Flutter @('build','apk','--no-pub','--release')
-    $universal=Join-Path $deliveryRoot 'EatenYet-v1.0.0-android-universal.apk'
+    $universal=Join-Path $deliveryRoot "EatenYet-v$releaseVersion-build$releaseBuild-android-universal.apk"
     Copy-Item -LiteralPath $apk -Destination $universal -Force
     foreach($file in @($arm64,$universal)) {
       & (Join-Path $PSScriptRoot 'scripts/verify-apk.ps1') -Apk $file

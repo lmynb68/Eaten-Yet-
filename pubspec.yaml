@@ -1,7 +1,7 @@
 name: eat_what
 description: 中北大学选餐框架：双菜单库、预算组合与局部重抽。
 publish_to: none
-version: 1.0.0+23
+version: 1.0.0+25
 environment:
   sdk: '>=3.5.0 <4.0.0'
 dependencies:

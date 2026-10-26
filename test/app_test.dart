@@ -92,7 +92,9 @@ void main() {
     await tester.tap(find.text('官方最新版本')); await tester.pumpAndSettle();
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
-    expect(find.textContaining('不会在启动时弹窗'), findsOneWidget);
+    expect(find.textContaining('更新由你决定，不会自动安装'), findsOneWidget);
+    expect(find.text('打开官方发布页面'), findsNothing);
+    expect(find.text('下载并安装更新'), findsNothing);
     expect(tester.takeException(), isNull);
   });
   testWidgets('catalog builds only visible cards and can scroll to the last dish', (tester) async {

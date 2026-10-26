@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Apk)
+﻿param([Parameter(Mandatory=$true)][string]$Apk)
 $ErrorActionPreference='Stop'
 $sdk=$env:ANDROID_SDK_ROOT
 if(!$sdk){$sdk=$env:ANDROID_HOME}
@@ -17,7 +17,10 @@ if(($report -join "`n") -notmatch "certificate SHA-256 digest: $expected"){throw
 $badging=& (Join-Path $build.FullName 'aapt.exe') dump badging $Apk
 if($LASTEXITCODE -ne 0){throw 'Unable to inspect Android package.'}
 $text=$badging -join "`n"
-if($text -notmatch "name='local.eatwhat.campus' versionCode='23' versionName='1.0.0'"){throw 'Unexpected package or version.'}
+$versionLine=Get-Content (Join-Path $PSScriptRoot '../pubspec.yaml') | Where-Object { $_ -match '^version:' } | Select-Object -First 1
+if($versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)'){throw 'Invalid package version.'}
+$expectedVersion=[regex]::Escape($Matches[1]); $expectedCode=$Matches[2]
+if($text -notmatch "name='local.eatwhat.campus' versionCode='$expectedCode' versionName='$expectedVersion'"){throw 'Unexpected package or version.'}
 if($text -match 'application-debuggable'){throw 'Debuggable APK cannot be released.'}
 Write-Host 'PASS: production certificate, signature, package, version and non-debuggable flag.'
 $badging | Select-String "sdkVersion:|targetSdkVersion:|native-code:"
