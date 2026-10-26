@@ -1,23 +1,23 @@
 {
   "status": "published",
   "version": "1.0.0",
-  "tag": "v1.0.0",
-  "publishedAt": "2026-10-25T15:04:28Z",
+  "tag": "v1.0.0+25",
+  "publishedAt": "2026-10-26T15:03:57Z",
   "minAndroid": "7.0 (API 24)",
   "assets": [
     {
-      "name": "EatenYet-v1.0.0-android-arm64.apk",
+      "name": "EatenYet-v1.0.0-build25-android-arm64.apk",
       "abi": "arm64-v8a",
-      "bytes": 23944761,
-      "sha256": "15bb5fbc57f2389b21a277476649c41357199d72ea11af1a72b0bcaa294508cb",
-      "url": "https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0/EatenYet-v1.0.0-android-arm64.apk"
+      "bytes": 24076281,
+      "sha256": "87e81e3a5dac2d957669155559bb3c5ff6516ce1ee6d6f04a6d93d3d278fe39d",
+      "url": "https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-arm64.apk"
     },
     {
-      "name": "EatenYet-v1.0.0-android-universal.apk",
+      "name": "EatenYet-v1.0.0-build25-android-universal.apk",
       "abi": "arm64-v8a, armeabi-v7a, x86_64",
-      "bytes": 60108067,
-      "sha256": "e6e3a68ad9e65f553dfa4108bbad84ca35e5a12bb18f7831082ee174aeb31380",
-      "url": "https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0/EatenYet-v1.0.0-android-universal.apk"
+      "bytes": 60305123,
+      "sha256": "8095887b54e85276f7c50f6f0bc00ac3d8171f725b2e74089dfca3fb62477ed3",
+      "url": "https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-universal.apk"
     }
   ]
 }
