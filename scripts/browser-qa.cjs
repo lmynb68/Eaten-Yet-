@@ -25,17 +25,19 @@ try{
   check(`no horizontal overflow at ${width}`,await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
  }
  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
- check('menu opens',await evaluate("document.querySelector('#toggle').click();document.querySelector('#toggle').getAttribute('aria-expanded')==='true'"));
- check('menu link closes menu',await evaluate("document.querySelector('#nav a').click();document.querySelector('#toggle').getAttribute('aria-expanded')==='false'"));
- await evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copied=text}}});document.querySelector('#copy-download').click()");await sleep(100);
- check('clipboard success handler and exact URL',await evaluate("window.copied==='https://github.com/lmynb68/Eaten-Yet-/releases/tag/v1.0.0' && document.querySelector('#copy-status').textContent.includes('已复制')"));
- await evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied')}}});document.querySelector('#copy-download').click()");await sleep(100);
- check('clipboard denied fallback',await evaluate("document.querySelector('#copy-status').textContent.includes('https://github.com/lmynb68/Eaten-Yet-/releases/tag/v1.0.0')"));
- await call('Network.setCacheDisabled',{cacheDisabled:true});await call('Network.emulateNetworkConditions',{offline:false,latency:400,downloadThroughput:50000,uploadThroughput:25000});
+ check('menu opens',await evaluate("document.querySelector('[data-menu-toggle]').click();document.querySelector('[data-menu-toggle]').getAttribute('aria-expanded')==='true'"));
+ check('menu link closes menu',await evaluate("document.querySelector('[data-nav] a').click();document.querySelector('[data-menu-toggle]').getAttribute('aria-expanded')==='false'"));
+ await evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copied=text}}});document.querySelector('[data-copy-release]').click()");await sleep(100);
+ check('clipboard success handler and exact URL',await evaluate("window.copied==='https://github.com/lmynb68/Eaten-Yet-/releases/tag/v1.0.0' && document.querySelector('[data-copy-status]').textContent.includes('已复制')"));
+ await evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied')}}});document.querySelector('[data-copy-release]').click()");await sleep(100);
+ check('clipboard denied fallback',await evaluate("document.querySelector('[data-copy-status]').textContent.includes('手动复制')"));
+ check('gallery switches to stores',await evaluate("document.querySelectorAll('[role=tab]')[1].click();document.querySelector('[data-gallery-image]').getAttribute('src')==='assets/android-stores.jpg'"));
+ check('gallery keyboard End selects last',await evaluate("document.querySelectorAll('[role=tab]')[1].dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));document.querySelectorAll('[role=tab]')[4].getAttribute('aria-selected')==='true'"));
+ await call('Network.setCacheDisabled' ,{cacheDisabled:true});await call('Network.emulateNetworkConditions',{offline:false,latency:400,downloadThroughput:50000,uploadThroughput:25000});
  const started=Date.now();await call('Page.navigate',{url});let ready=false;
- for(let i=0;i<450;i++){ready=await evaluate("document.readyState==='complete' && !!document.querySelector('#copy-download')");if(ready)break;await sleep(100);}
+ for(let i=0;i<450;i++){ready=await evaluate("document.readyState==='complete' && !!document.querySelector('[data-copy-release]')");if(ready)break;await sleep(100);}
  check('weak-network page ready within 45s',ready);report.weakNetworkReadyMs=Date.now()-started;
- check('weak-network menu interaction',await evaluate("document.querySelector('#toggle').click();document.querySelector('#toggle').getAttribute('aria-expanded')==='true'"));
+ check('weak-network menu interaction',await evaluate("document.querySelector('[data-menu-toggle]').click();document.querySelector('[data-menu-toggle]').getAttribute('aria-expanded')==='true'"));
  report.clipboardScope='Handlers tested with injected success/denial; actual OS clipboard and phone permissions remain unverified';
  report.pass=true;
 }finally{if(ws)ws.close();chrome.kill();server.close();fs.writeFileSync(process.env.QA_REPORT||'browser-qa-result.json',JSON.stringify(report,null,2));}
