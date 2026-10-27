@@ -77,10 +77,8 @@ fetch('release.json')
 
     document.querySelectorAll('[data-primary-download], [data-arm64-download]').forEach((link) => { link.href = arm64.url; });
     document.querySelector('[data-arm64-size]').textContent = formatMegabytes(arm64.bytes);
-    document.querySelector('[data-arm64-sha]').textContent = arm64.sha256;
     document.querySelector('[data-universal-download]').href = universal.url;
     document.querySelector('[data-universal-size]').textContent = formatMegabytes(universal.bytes);
-    document.querySelector('[data-universal-sha]').textContent = universal.sha256;
     document.querySelector('[data-release-status]').dataset.releaseStatus = 'ready';
   })
   .catch(() => {
@@ -97,7 +95,7 @@ if (copyButton && releaseLink && copyStatus) {
     const url = releaseLink.href;
     try {
       await navigator.clipboard.writeText(url);
-      copyStatus.textContent = '发布页链接已复制。';
+      copyStatus.textContent = '官网链接已复制。';
       copyButton.textContent = '已复制';
     } catch {
       copyStatus.textContent = '浏览器未允许复制，请选择上方明文链接后手动复制。';

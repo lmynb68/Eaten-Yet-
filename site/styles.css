@@ -115,9 +115,6 @@ button { font: inherit; }
 .download-copy > p:last-child { margin: 2px 0 0; color: #aaa198; font-size: .86rem; }
 .download-section .button-secondary { border-color: #ded7cf; color: var(--paper); }
 .download-section .button-secondary:hover { background: var(--paper); color: var(--ink); }
-.checksum { grid-column: 1 / -1; }
-.checksum summary { width: fit-content; color: #cfc7be; cursor: pointer; font-size: .82rem; }
-.checksum code { display: block; margin-top: 12px; padding: 12px; background: #292622; color: #f1e8df; font-size: .72rem; line-height: 1.5; overflow-wrap: anywhere; }
 .release-link-box { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 18px; align-items: center; padding-block: 24px; }
 .release-link-box strong, .release-link-box a { display: block; }
 .release-link-box a { color: #c9c1b7; font-size: .78rem; overflow-wrap: anywhere; }
