@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:eat_what/main.dart';
 import 'package:eat_what/domain.dart';
 import 'package:eat_what/repository.dart';
+import 'package:eat_what/favorites.dart';
 
 void main() {
   setUp(() {
@@ -29,6 +30,23 @@ void main() {
       reason: 'The application must show the meal page, not a loading error');
     await tester.pumpAndSettle();
   }
+  testWidgets('corrupt favorites do not block meal selection and remain recoverable', (tester) async {
+    const damaged = '{broken favorites';
+    SharedPreferences.setMockInitialValues({
+      'eat_what.meal_period': 'lunch', FavoriteStore.storageKey: damaged,
+    });
+    await startApp(tester);
+    await tester.ensureVisible(find.text('随机一份'));
+    await tester.tap(find.text('随机一份'));
+    await tester.pumpAndSettle();
+    expect(find.text('今天，吃什么？'), findsOneWidget);
+    expect(find.text('已为你选好一份。'), findsOneWidget);
+    await tester.tap(find.text('我的喜爱'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('收藏数据无法解析'), findsOneWidget);
+    expect((await SharedPreferences.getInstance()).getString(FavoriteStore.storageKey), damaged);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('personal editor has photo space and separated fields on a small phone', (tester) async {
     tester.view.physicalSize = const Size(390, 844); tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize); addTearDown(tester.view.resetDevicePixelRatio);

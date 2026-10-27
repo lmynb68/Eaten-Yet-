@@ -19,16 +19,17 @@ try{
  const evaluate=async expression=>{const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
  const check=(name,ok)=>{report.checks.push({name,pass:!!ok});if(!ok)throw Error(name);};
  await call('Page.enable');await call('Network.enable');
- for(const width of [320,360,390,768]){
+ for(const width of [320,360,390,768,1440]){
   await call('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:true});await call('Page.navigate',{url});
   for(let i=0;i<100;i++){if(await evaluate("document.readyState==='complete'"))break;await sleep(100);}
   check(`no horizontal overflow at ${width}`,await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+  check(`download help below introduction at ${width}`,await evaluate("document.querySelector('.download-options').getBoundingClientRect().top >= document.querySelector('.download-intro').getBoundingClientRect().bottom"));
  }
  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
  check('menu opens',await evaluate("document.querySelector('[data-menu-toggle]').click();document.querySelector('[data-menu-toggle]').getAttribute('aria-expanded')==='true'"));
  check('menu link closes menu',await evaluate("document.querySelector('[data-nav] a').click();document.querySelector('[data-menu-toggle]').getAttribute('aria-expanded')==='false'"));
  await evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.copied=text}}});document.querySelector('[data-copy-release]').click()");await sleep(100);
- check('clipboard success handler and exact URL',await evaluate("window.copied==='https://github.com/lmynb68/Eaten-Yet-/releases/tag/v1.0.0' && document.querySelector('[data-copy-status]').textContent.includes('已复制')"));
+ check('clipboard success handler and exact URL',await evaluate("window.copied==='https://lmynb68.github.io/Eaten-Yet-/' && document.querySelector('[data-copy-status]').textContent.includes('已复制')"));
  await evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw Error('denied')}}});document.querySelector('[data-copy-release]').click()");await sleep(100);
  check('clipboard denied fallback',await evaluate("document.querySelector('[data-copy-status]').textContent.includes('手动复制')"));
  check('gallery switches to stores',await evaluate("document.querySelectorAll('[role=tab]')[1].click();document.querySelector('[data-gallery-image]').getAttribute('src')==='assets/android-stores.jpg'"));
