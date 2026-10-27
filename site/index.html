@@ -43,7 +43,7 @@
           <h1 id="hero-title">今天吃什么，<br>交给它选。</h1>
           <p class="hero-lede">设好预算，从熟悉的校园菜单里选一顿。</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-arm64.apk" data-primary-download>下载 Android 版</a>
+            <a class="button button-primary" href="https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-arm64.apk" data-primary-download>下载 ARM64 版</a>
             <a class="text-link" href="#interface">查看真实界面 <span aria-hidden="true">↓</span></a>
           </div>
           <p class="hero-meta"><strong>1.0 正式版</strong><span>适用于 Android 7.0 及以上</span></p>
@@ -124,13 +124,19 @@
         </div>
         <div class="download-options" data-release-status="loading">
           <article class="download-option is-primary">
-            <div class="download-copy"><p class="option-kicker">大多数安卓手机选这个</p><h3>安卓版</h3><p><span data-arm64-size>23.0 MiB</span></p></div>
-            <a class="button button-primary" href="https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-arm64.apk" data-arm64-download>下载安卓版</a>
+            <div class="download-copy"><p class="option-kicker">推荐 · 支持 64 位 ARM 的安卓手机</p><h3>ARM64 版</h3><p><span data-arm64-size>23.0 MiB</span> · arm64-v8a</p></div>
+            <a class="button button-primary" href="https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-arm64.apk" data-arm64-download>下载 ARM64 版</a>
           </article>
           <article class="download-option">
-            <div class="download-copy"><p class="option-kicker">上面的版本无法安装时选择</p><h3>通用版</h3><p><span data-universal-size>57.5 MiB</span></p></div>
+            <div class="download-copy"><p class="option-kicker">不确定手机架构时可选</p><h3>通用版</h3><p><span data-universal-size>57.5 MiB</span> · ARM64 / ARMv7 / x86_64</p></div>
             <a class="button button-secondary" href="https://github.com/lmynb68/Eaten-Yet-/releases/download/v1.0.0%2B25/EatenYet-v1.0.0-build25-android-universal.apk" data-universal-download>下载通用版</a>
           </article>
+          <div class="download-guide">
+            <h3>怎么选？</h3>
+            <p><strong>ARM64 版：</strong>适用于支持 64 位 ARM 应用的安卓手机，安装包更小。架构名称是 arm64-v8a，不是 x64。</p>
+            <p><strong>通用版：</strong>同时包含 ARM64（64 位 ARM）、ARMv7（32 位 ARM）和 x86_64（也称 x64）。适合不确定架构的用户，以及对应架构的安卓设备或模拟器；安装包更大，功能相同。</p>
+            <p>两种安装包都需要 Android 7.0 及以上，不能直接安装在 Windows 或 iPhone 上。通用版只能解决架构兼容问题，不能解决签名冲突、版本降级或存储空间不足。</p>
+          </div>
           <div class="release-link-box">
             <div><strong>分享给一起吃饭的人</strong><a href="https://lmynb68.github.io/Eaten-Yet-/" data-release-link>lmynb68.github.io/Eaten-Yet-/</a></div>
             <button class="copy-button" type="button" data-copy-release>复制官网链接</button>

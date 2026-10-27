@@ -206,3 +206,8 @@ button { font: inherit; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.download-guide { padding-block: 24px; border-bottom: 1px solid #665f57; }
+.download-guide h3 { margin: 0 0 12px; font-size: 1.15rem; }
+.download-guide p { color: #c9c1b7; font-size: .9rem; overflow-wrap: anywhere; }
+.download-guide strong { color: var(--paper); }
