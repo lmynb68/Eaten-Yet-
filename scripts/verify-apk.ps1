@@ -1,4 +1,4 @@
-﻿param([Parameter(Mandatory=$true)][string]$Apk)
+﻿param([Parameter(Mandatory=$true)][string]$Apk, [ValidateSet('arm64','universal')][string]$Kind)
 $ErrorActionPreference='Stop'
 $sdk=$env:ANDROID_SDK_ROOT
 if(!$sdk){$sdk=$env:ANDROID_HOME}
@@ -19,8 +19,21 @@ if($LASTEXITCODE -ne 0){throw 'Unable to inspect Android package.'}
 $text=$badging -join "`n"
 $versionLine=Get-Content (Join-Path $PSScriptRoot '../pubspec.yaml') | Where-Object { $_ -match '^version:' } | Select-Object -First 1
 if($versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)'){throw 'Invalid package version.'}
-$expectedVersion=[regex]::Escape($Matches[1]); $expectedCode=$Matches[2]
-if($text -notmatch "name='local.eatwhat.campus' versionCode='$expectedCode' versionName='$expectedVersion'"){throw 'Unexpected package or version.'}
+$expectedVersion=$Matches[1]; $expectedCode=$Matches[2]
+if($text -cnotmatch "(?m)^package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'"){throw 'Missing APK identity.'}
+if($Matches[1] -cne 'local.eatwhat.campus' -or $Matches[2] -cne $expectedCode -or $Matches[3] -cne $expectedVersion){throw 'Unexpected package or version.'}
+if($Kind){
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive=[IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $Apk).Path)
+  try {
+    $expectedAbis=if($Kind -eq 'arm64'){@('arm64-v8a')}else{@('arm64-v8a','armeabi-v7a','x86_64')}
+    foreach($library in 'libapp.so','libflutter.so'){
+      $pattern='^lib/([^/]+)/'+[regex]::Escape($library)+'$'
+      $actualAbis=@(foreach($entry in $archive.Entries){if($entry.FullName -cmatch $pattern){$Matches[1]}})
+      if(($actualAbis | Sort-Object -Unique) -join ',' -cne ($expectedAbis -join ',')){throw "Unexpected ABI for $library in $Kind APK."}
+    }
+  } finally {$archive.Dispose()}
+}
 if($text -match 'application-debuggable'){throw 'Debuggable APK cannot be released.'}
 Write-Host 'PASS: production certificate, signature, package, version and non-debuggable flag.'
 $badging | Select-String "sdkVersion:|targetSdkVersion:|native-code:"

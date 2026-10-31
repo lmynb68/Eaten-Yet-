@@ -8,6 +8,15 @@ import shutil
 import sys
 import tempfile
 
+def verify_files(directory, assets):
+    for asset in assets:
+        path = directory / asset['name']
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != asset['bytes']:
+            raise ValueError('Invalid APK size/type')
+        if hashlib.sha256(path.read_bytes()).hexdigest() != asset['sha256']:
+            raise ValueError('APK checksum mismatch')
+
+
 def activate(incoming, root):
     manifest = json.loads((incoming / 'release.json').read_text(encoding='utf-8-sig'))
     build = manifest['build']
@@ -36,17 +45,13 @@ def activate(incoming, root):
         path = incoming / name
         if path.is_symlink() or path.stat().st_size != asset['bytes']:
             raise ValueError('Invalid APK size/type')
-        if hashlib.sha256(path.read_bytes()).hexdigest() != asset['sha256']:
-            raise ValueError('APK checksum mismatch')
         if asset['url'] != f'downloads/build-{build}/{name}':
             raise ValueError('Unexpected download URL')
     downloads = root / 'downloads'
     downloads.mkdir(exist_ok=True)
     destination = downloads / f'build-{build}'
     if destination.exists():
-        for asset in manifest['assets']:
-            if hashlib.sha256((destination / asset['name']).read_bytes()).hexdigest() != asset['sha256']:
-                raise ValueError('Existing build differs')
+        verify_files(destination, manifest['assets'])
     else:
         staging = Path(tempfile.mkdtemp(prefix='.upload-', dir=downloads))
         try:
@@ -55,6 +60,7 @@ def activate(incoming, root):
                 target = staging / asset['name']
                 shutil.copyfile(incoming / asset['name'], target)
                 target.chmod(0o644)
+            verify_files(staging, manifest['assets'])
             staging.rename(destination)
         finally:
             if staging.exists():

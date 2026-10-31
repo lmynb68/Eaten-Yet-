@@ -36,12 +36,12 @@ def prepare(folder, release, tools):
         if f'certificate SHA-256 digest: {CERT}' not in signature:
             raise ValueError('Wrong signing certificate')
         info = subprocess.check_output([str(tools / 'aapt'), 'dump', 'badging', str(apk)], text=True)
-        match = re.search(r"package: name='local.eatwhat.campus' versionCode='(\d+)' versionName='(\d+\.\d+\.\d+)'", info)
-        if not match or 'application-debuggable' in info or "sdkVersion:'24'" not in info:
+        match = re.search(r"(?m)^package: name='([^']+)' versionCode='(\d+)' versionName='(\d+\.\d+\.\d+)'", info)
+        if not match or match[1] != 'local.eatwhat.campus' or 'application-debuggable' in info or "sdkVersion:'24'" not in info:
             raise ValueError('Unexpected APK identity, debug flag or minimum SDK')
         expected = set(abi.replace(' ', '').split(','))
         verify_architectures(apk, expected)
-        current = (int(match[1]), match[2])
+        current = (int(match[2]), match[3])
         if identity and identity != current:
             raise ValueError('APK versions differ')
         identity = current

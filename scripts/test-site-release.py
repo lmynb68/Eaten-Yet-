@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 spec = importlib.util.spec_from_file_location('activate', Path(__file__).with_name('activate-site-release.py'))
@@ -68,7 +69,36 @@ class ActivationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.activate(self.incoming, self.root)
         self.assertEqual(json.loads((self.root / 'release.json').read_text()), self.old)
-        self.assertFalse((self.root / 'downloads').exists())
+        self.assertFalse((self.root / 'downloads/build-27').exists())
+
+    def test_same_size_source_change_during_copy_keeps_old_download(self):
+        downloads = self.root / 'downloads'
+        downloads.mkdir()
+        old_apk = downloads / 'old.apk'
+        old_apk.write_bytes(b'previous release')
+        self.old['assets'] = [{'url': 'downloads/old.apk'}]
+        (self.root / 'release.json').write_text(json.dumps(self.old))
+        copyfile = module.shutil.copyfile
+
+        def change_source_then_copy(source, target):
+            if source.name == self.manifest['assets'][1]['name']:
+                source.write_bytes(b'X' * source.stat().st_size)
+            return copyfile(source, target)
+
+        with patch.object(module.shutil, 'copyfile', side_effect=change_source_then_copy):
+            with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                module.activate(self.incoming, self.root)
+        active = json.loads((self.root / 'release.json').read_text())
+        self.assertEqual(active, self.old)
+        self.assertEqual((self.root / active['assets'][0]['url']).read_bytes(), b'previous release')
+        self.assertEqual(list(downloads.iterdir()), [old_apk])
+
+    def test_lookalike_package_rejected_before_architecture_check(self):
+        signature = 'certificate SHA-256 digest: ' + prepare_module.CERT
+        badging = "package: name='localXeatwhatYcampus' versionCode='27' versionName='1.0.0'\nsdkVersion:'24'"
+        with patch.object(prepare_module.subprocess, 'check_output', side_effect=[signature, badging]):
+            with self.assertRaisesRegex(ValueError, 'identity'):
+                prepare_module.prepare(self.incoming, {'draft': False, 'prerelease': False}, Path('.'))
 
     def test_downgrade_rejected(self):
         self.manifest['build'] = 24

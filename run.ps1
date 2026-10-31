@@ -59,18 +59,26 @@ try {
     $versionLine=Get-Content (Join-Path $PSScriptRoot 'pubspec.yaml') | Where-Object { $_ -match '^version:' } | Select-Object -First 1
     if($versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)'){throw 'Invalid package version.'}
     $releaseVersion=$Matches[1]; $releaseBuild=$Matches[2]
-    Invoke-Flutter @('build','apk','--no-pub','--release','--target-platform','android-arm64')
-    $apk=Join-Path $PSScriptRoot 'build\app\outputs\flutter-apk\app-release.apk'
-    $arm64=Join-Path $deliveryRoot "EatenYet-v$releaseVersion-build$releaseBuild-android-arm64.apk"
-    Copy-Item -LiteralPath $apk -Destination $arm64 -Force
-    Invoke-Flutter @('build','apk','--no-pub','--release')
-    $universal=Join-Path $deliveryRoot "EatenYet-v$releaseVersion-build$releaseBuild-android-universal.apk"
-    Copy-Item -LiteralPath $apk -Destination $universal -Force
-    foreach($file in @($arm64,$universal)) {
-      & (Join-Path $PSScriptRoot 'scripts/verify-apk.ps1') -Apk $file
-      Write-Host ('APK: '+$file)
-      Write-Host ('Bytes: '+(Get-Item -LiteralPath $file).Length)
-      Write-Host ('SHA256: '+(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash)
+    $destination=Join-Path $deliveryRoot "EatenYet-v$releaseVersion-build$releaseBuild"
+    if(Test-Path -LiteralPath $destination){throw "Delivery already exists: $destination"}
+    $stage=[IO.Directory]::CreateDirectory((Join-Path $deliveryRoot ('.release-'+[guid]::NewGuid()))).FullName
+    try {
+      $apk=Join-Path $PSScriptRoot 'build\app\outputs\flutter-apk\app-release.apk'
+      foreach($kind in 'arm64','universal'){
+        $buildArgs=@('build','apk','--no-pub','--release')
+        if($kind -eq 'arm64'){$buildArgs+=@('--target-platform','android-arm64')}
+        Invoke-Flutter $buildArgs
+        $file=Join-Path $stage "EatenYet-v$releaseVersion-build$releaseBuild-android-$kind.apk"
+        Copy-Item -LiteralPath $apk -Destination $file
+        & (Join-Path $PSScriptRoot 'scripts/verify-apk.ps1') -Apk $file -Kind $kind
+      }
+      [IO.Directory]::Move($stage,$destination)
+      Write-Host "Verified APKs: $destination"
+    } finally {
+      if(Test-Path -LiteralPath $stage){
+        Get-ChildItem -LiteralPath $stage -File | Remove-Item
+        [IO.Directory]::Delete($stage)
+      }
     }
   }
 } catch { Write-Host ('FAILED: '+$_.Exception.Message); exit 1 }
