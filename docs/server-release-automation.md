@@ -1,8 +1,12 @@
 # 正式 APK 自动同步到网站
 
-状态：代码已准备；服务器专用账号和 GitHub Secrets 未配置，尚未启用或做远程联调。
+状态（2026-10-31）：已启用。服务器专用账号 eaten-deploy、website-server 环境、部署 Secrets 和 SITE_ROOT 均已配置。目标仍为内部预览站，不开放公网网站。
+
+验收：使用已发布正式版 v1.0.0+25 手动触发完整工作流成功，[运行记录](https://github.com/lmynb68/Eaten-Yet-/actions/runs/41161657789)。8 项回归测试通过，签名/包名/版本/架构校验通过；Nginx 首页 HTTP 200，通过内部 HTTP 下载的两份 APK 大小和 SHA256 均匹配。尚未通过发布一个新的正式版本验证 release 事件；该触发器已配置。
 
 流程：GitHub 发布正式 Release → 验证正式证书、包名、版本、最低系统及 GitHub SHA256 → 上传到独立临时目录 → 服务器再次核对大小和 SHA256 → 保存 APK → 原子替换 release.json。失败保留旧版下载信息。旧 APK 不自动删除。
+
+传输使用 rsync，以构建号划分上传目录，支持断点续传；校验一致的既有文件可复用。跨境传输可能较慢，工作流总时限为 90 分钟；中断后可重跑同一标签，下载清单只在校验成功后切换。临时上传目录和历史 APK 当前保留，需按实际磁盘用量定期清理。
 
 ## 发布约定
 
@@ -14,7 +18,7 @@
 - 发布时附件尚未齐全会失败；补齐后可从 Actions 手动运行并填原标签。
 - 用 GITHUB_TOKEN 创建 Release 可能不会触发后续工作流；这类发布应显式调用手动工作流或调整发布授权，不要假设必然触发。
 
-## 服务器准备（由用户理解并执行）
+## 服务器准备记录（已执行，无需重复）
 
 以下仅用于现有内部预览目录；不开放端口、不改 Nginx、不配置域名。
 
@@ -28,7 +32,7 @@ sudo chown -R eaten-deploy:eaten-deploy /var/www/eaten-yet-staging/downloads
 
 解释：`sudo` 使用管理员权限；`adduser` 创建专用账号，禁用密码登录；`install -d` 创建目录，`-m` 设置权限，`-o/-g` 设置所属用户/组；`chown` 允许专用账号写入网站目录。该账号不加入 sudo 组。
 
-另生成一把专用于 GitHub Actions 的 SSH 密钥，将公钥加入该账号的 authorized_keys，设置目录700、文件600，并添加 `restrict` 公钥选项（禁止转发/PTY）。不要使用当前本地 root 运维密钥。私钥仅填 GitHub Secret，不提交仓库、不发聊天。配置前先逐步讲解并由用户执行，不自动操作服务器。
+已生成专用于 GitHub Actions 的 SSH 密钥，将公钥加入该账号的 authorized_keys，目录700、文件600，并添加 `restrict` 公钥选项（禁止转发/PTY）。未使用 root 运维密钥。部署私钥及口令存入独立 GitHub Secrets，不提交仓库、不发聊天；任务结束销毁临时 SSH agent。用户本次授权直接执行配置。
 
 ## GitHub 设置
 
