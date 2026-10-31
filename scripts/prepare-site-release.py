@@ -6,8 +6,19 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 
 CERT = 'ba897c5fa7a0b3e55c828d0e6b17b1f9640dfda37b07accce1b29e53b99a17ef'
+
+def verify_architectures(apk, expected):
+    with zipfile.ZipFile(apk) as archive:
+        names = archive.namelist()
+    # Plugins can include unused ABIs; the Flutter engine AND app determine support.
+    for library in ('libapp.so', 'libflutter.so'):
+        actual = {name.split('/')[1] for name in names
+                  if re.fullmatch(r'lib/[^/]+/' + re.escape(library), name)}
+        if actual != expected:
+            raise ValueError(f'Unexpected APK architectures for {library}: {sorted(actual)}')
 
 def prepare(folder, release, tools):
     if release['draft'] or release['prerelease']:
@@ -28,10 +39,8 @@ def prepare(folder, release, tools):
         match = re.search(r"package: name='local.eatwhat.campus' versionCode='(\d+)' versionName='(\d+\.\d+\.\d+)'", info)
         if not match or 'application-debuggable' in info or "sdkVersion:'24'" not in info:
             raise ValueError('Unexpected APK identity, debug flag or minimum SDK')
-        native = re.search(r'^native-code:(.*)$', info, re.MULTILINE)
         expected = set(abi.replace(' ', '').split(','))
-        if not native or set(re.findall(r"'([^']+)'", native[1])) != expected:
-            raise ValueError('Unexpected APK architectures')
+        verify_architectures(apk, expected)
         current = (int(match[1]), match[2])
         if identity and identity != current:
             raise ValueError('APK versions differ')

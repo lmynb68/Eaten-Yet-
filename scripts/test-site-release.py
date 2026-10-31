@@ -4,10 +4,34 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import zipfile
 
 spec = importlib.util.spec_from_file_location('activate', Path(__file__).with_name('activate-site-release.py'))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+prepare_spec = importlib.util.spec_from_file_location('prepare', Path(__file__).with_name('prepare-site-release.py'))
+prepare_module = importlib.util.module_from_spec(prepare_spec)
+prepare_spec.loader.exec_module(prepare_module)
+
+class ArchitectureTests(unittest.TestCase):
+    def test_plugin_extra_abis_are_not_app_abis(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as directory:
+            apk = Path(directory) / 'sample.apk'
+            with zipfile.ZipFile(apk, 'w') as archive:
+                for name in ('lib/arm64-v8a/libapp.so', 'lib/arm64-v8a/libflutter.so',
+                             'lib/x86_64/libdatastore_shared_counter.so'):
+                    archive.writestr(name, b'fixture')
+            prepare_module.verify_architectures(apk, {'arm64-v8a'})
+            with self.assertRaises(ValueError):
+                prepare_module.verify_architectures(apk, {'arm64-v8a', 'x86_64'})
+
+    def test_missing_engine_is_rejected(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as directory:
+            apk = Path(directory) / 'sample.apk'
+            with zipfile.ZipFile(apk, 'w') as archive:
+                archive.writestr('lib/arm64-v8a/libapp.so', b'fixture')
+            with self.assertRaises(ValueError):
+                prepare_module.verify_architectures(apk, {'arm64-v8a'})
 
 class ActivationTests(unittest.TestCase):
     def setUp(self):
