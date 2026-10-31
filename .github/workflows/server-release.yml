@@ -16,7 +16,7 @@ jobs:
   sync:
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     environment: website-server
     steps:
       - uses: actions/checkout@v6
@@ -66,9 +66,14 @@ jobs:
           export SSH_ASKPASS="$HOME/.ssh/deploy-askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=:0
           ssh-add ~/.ssh/deploy </dev/null
           opts=(-i ~/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20)
-          remote="uploads/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          build=$(jq -r .build payload/release.json)
+          [[ "$build" =~ ^[0-9]+$ ]]
+          remote="uploads/build-$build"
           ssh "${opts[@]}" "$DEPLOY_USER_NAME@$SERVER" "mkdir -p '$remote'"
-          scp "${opts[@]}" payload/*.apk payload/release.json scripts/activate-site-release.py "$DEPLOY_USER_NAME@$SERVER:$remote/"
+          export RSYNC_RSH="ssh -i $HOME/.ssh/deploy -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=6"
+          rsync -r --checksum --partial-dir=.rsync-partial --timeout=300 --info=progress2 \
+            --copy-dest="$SITE_ROOT/downloads" payload/ "$DEPLOY_USER_NAME@$SERVER:$remote/"
+          scp "${opts[@]}" scripts/activate-site-release.py "$DEPLOY_USER_NAME@$SERVER:$remote/"
           ssh "${opts[@]}" "$DEPLOY_USER_NAME@$SERVER" "python3 '$remote/activate-site-release.py' '$remote' '$SITE_ROOT'"
       - name: Remove runner key
         if: always()
