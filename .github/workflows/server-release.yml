@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 90
     environment: website-server
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           persist-credentials: false
