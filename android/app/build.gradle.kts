@@ -64,4 +64,4 @@ flutter {
     source = "../.."
 }
 
-dependencies { implementation("androidx.core:core:1.17.0") }
+dependencies { implementation("androidx.core:core:1.19.1") }
