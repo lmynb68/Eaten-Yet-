@@ -14,8 +14,23 @@ $report=& $java -jar (Join-Path $build.FullName 'lib/apksigner.jar') verify --pr
 if($LASTEXITCODE -ne 0){throw 'APK signature verification failed.'}
 $expected='ba897c5fa7a0b3e55c828d0e6b17b1f9640dfda37b07accce1b29e53b99a17ef'
 if(($report -join "`n") -notmatch "certificate SHA-256 digest: $expected"){throw 'APK was not signed with the designated production certificate.'}
-$badging=& (Join-Path $build.FullName 'aapt.exe') dump badging $Apk
-if($LASTEXITCODE -ne 0){throw 'Unable to inspect Android package.'}
+$inputPath=(Resolve-Path -LiteralPath $Apk).Path
+$tempCopy=$null
+try {
+  if ($inputPath -match '[^\x00-\x7F]') {
+    # Older aapt versions cannot decode non-ASCII filenames. Pass a relative ASCII name.
+    $tempCopy=Join-Path ([IO.Path]::GetTempPath()) ("verify-"+[guid]::NewGuid()+".apk")
+    Copy-Item -LiteralPath $inputPath -Destination $tempCopy
+    Push-Location -LiteralPath (Split-Path -Parent $tempCopy)
+    try { $badging=& (Join-Path $build.FullName 'aapt.exe') dump badging (Split-Path -Leaf $tempCopy) }
+    finally { Pop-Location }
+  } else {
+    $badging=& (Join-Path $build.FullName 'aapt.exe') dump badging $inputPath
+  }
+  if($LASTEXITCODE -ne 0){throw 'Unable to inspect Android package.'}
+} finally {
+  if ($tempCopy -and (Test-Path -LiteralPath $tempCopy)) { Remove-Item -LiteralPath $tempCopy }
+}
 $text=$badging -join "`n"
 $versionLine=Get-Content (Join-Path $PSScriptRoot '../pubspec.yaml') | Where-Object { $_ -match '^version:' } | Select-Object -First 1
 if($versionLine -notmatch '^version:\s*(\d+\.\d+\.\d+)\+(\d+)'){throw 'Invalid package version.'}

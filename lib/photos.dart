@@ -20,6 +20,9 @@ Future<String?> pickDishPhoto() async {
   final file = await ImagePicker().pickImage(source: ImageSource.gallery,
     maxWidth: 900, maxHeight: 900, imageQuality: 65, requestFullMetadata: false);
   if (file == null) return null;
+  if (await file.length() > 300000) {
+    throw const FormatException('照片过大，请选择小于300KB的图片');
+  }
   final bytes = await file.readAsBytes();
   if (bytes.length > 300000) throw const FormatException('照片过大，请选择小于300KB的图片');
   return base64Encode(bytes);

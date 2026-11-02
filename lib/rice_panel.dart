@@ -13,10 +13,12 @@ class RicePanel extends StatefulWidget {
   final bool snacksOnly;
   final FavoriteStore? preferences;
   final Future<void> Function(RicePlan, List<String>, Entry?)? onFavorite;
+  final bool favoriteBusy;
+  final bool Function(RicePlan, List<String>, Entry?)? isFavorite;
   final List<Entry> snacks;
   final Map<String,String> stores;
   final Future<bool> Function(RicePlan) savePersonal;
-  const RicePanel({super.key, this.snacksOnly = false, this.preferences, this.onFavorite, this.stores = const {}, this.snacks = const [], required this.plans, required this.budget, required this.savePersonal});
+  const RicePanel({super.key, this.snacksOnly = false, this.preferences, this.onFavorite, this.isFavorite, this.favoriteBusy = false, this.stores = const {}, this.snacks = const [], required this.plans, required this.budget, required this.savePersonal});
   @override
   State<RicePanel> createState() => _RicePanelState();
 }
@@ -181,9 +183,11 @@ class _RicePanelState extends State<RicePanel> {
       ],
       if (p != null && dishes.any((d) => d != null) && riceStoreKey(p, widget.stores) != null) SnackPanel(placeKey: riceStoreKey(p, widget.stores)!, pool: widget.snacks, budget: widget.budget, mainPrice: total, selected: snack, weight: (e) => widget.preferences?.score([for (final name in dishes.whereType<String>()) riceDishKey(p, name), e.key]) ?? 1, onChanged: (v) => setState(() => snack=v)),
       if (p != null && riceStoreKey(p, widget.stores) == null) const LText('请先编辑套餐并关联店铺，才能选择同店小食。'),
-      if (p != null && dishes.any((d) => d != null) && widget.onFavorite != null)
-        OutlinedButton.icon(onPressed: () => widget.onFavorite!(p, dishes.whereType<String>().toList(), snack),
-          icon: const Icon(Icons.favorite_border), label: const LText('满意，收藏这一顿')),
+      if (p != null && dishes.any((d) => d != null) && widget.onFavorite != null && riceStoreKey(p, widget.stores) != null)
+        OutlinedButton.icon(key: const Key('meal-favorite'),
+          onPressed: widget.favoriteBusy ? null : () => widget.onFavorite!(p, dishes.whereType<String>().toList(), snack),
+          icon: Icon(widget.isFavorite?.call(p, dishes.whereType<String>().toList(), snack) == true ? Icons.favorite : Icons.favorite_border),
+          label: LText(widget.isFavorite?.call(p, dishes.whereType<String>().toList(), snack) == true ? '已收藏，再点取消' : '满意，收藏这一顿')),
       if (!widget.snacksOnly) LText(message, key: const Key('rice-status')),
       if (!widget.snacksOnly) TextButton.icon(onPressed: () => edit(null), icon: const Icon(Icons.add), label: const LText('新建个人米饭套餐')),
     ]);

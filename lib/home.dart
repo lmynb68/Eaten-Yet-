@@ -306,7 +306,8 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
       ],
       if (riceMode) RicePanel(key: ValueKey('rice-filter-$filterRevision'), stores: storeChoices,
         plans: plans, budget: parseMoney(budget.text), savePersonal: saveRice, snacks: pool,
-        preferences: favorites, onFavorite: favoriteRice, snacksOnly: mealCategory == 'side')
+        preferences: favorites, onFavorite: favoriteRice, favoriteBusy: busy,
+        isFavorite: (p, names, side) => isFavorite(riceFavoriteMeal(p, names, side)), snacksOnly: mealCategory == 'side')
       else if (attachedSide) ...[
         LText('当前主菜：${selection[0]!.offer.name} · ${selection[0]!.place.name}'),
         wholeSnackPanel(selection[0]!), favoriteButton(selection[0]!),
@@ -345,27 +346,52 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     catch (e) { notify('保存失败：$e'); }
     finally { if (mounted) setState(() => busy=false); }
   }
-  Widget favoriteButton(Entry main) => OutlinedButton.icon(icon: const Icon(Icons.favorite_border),
-    label: const LText('满意，收藏这一顿'), onPressed: () => favoriteAction(() => favorites!.save(FavoriteMeal(
+  bool isFavorite(FavoriteMeal meal) => favorites!.meals.any((m) => m.id == meal.id);
+  Future<void> toggleFavorite(FavoriteMeal meal) {
+    final saved = isFavorite(meal);
+    return favoriteAction(() => saved ? favorites!.remove(meal.id) : favorites!.save(meal),
+      saved ? '已取消收藏' : '已收藏到“我的喜爱”');
+  }
+  Widget favoriteButton(Entry main) {
+    final meal = FavoriteMeal(
       storeKey: main.placeKey, storeName: main.place.name, kind: main.offer.kind == 'side' ? '小食' : '整份餐品',
       savedAt: DateTime.now().toIso8601String(), items: [FavoriteItem.entry(main),
-        if (main.offer.kind != 'side' && snack?.placeKey == main.placeKey) FavoriteItem.entry(snack!)],
-    )), '已收藏到“我的喜爱”；重复收藏不会叠加权重。'));
-  Future<void> favoriteRice(RicePlan p, List<String> names, Entry? side) => favoriteAction(() {
+        if (main.offer.kind != 'side' && snack?.placeKey == main.placeKey) FavoriteItem.entry(snack!)]);
+    final saved = isFavorite(meal);
+    return OutlinedButton.icon(key: const Key('meal-favorite'),
+      icon: Icon(saved ? Icons.favorite : Icons.favorite_border),
+      label: LText(saved ? '已收藏，再点取消' : '满意，收藏这一顿'),
+      onPressed: busy ? null : () => toggleFavorite(meal));
+  }
+  FavoriteMeal riceFavoriteMeal(RicePlan p, List<String> names, Entry? side) {
     final store = riceStoreKey(p, storeChoices);
     if (store == null || (side != null && side.placeKey != store)) throw StateError('主菜与小食必须属于同一家店');
-    return favorites!.save(FavoriteMeal(storeKey: store, storeName: storeChoices[store]!, kind: '米饭选菜',
+    return FavoriteMeal(storeKey: store, storeName: storeChoices[store]!, kind: '米饭选菜',
       savedAt: DateTime.now().toIso8601String(), ricePrice: p.priceCents, baseLabel: p.pricedByDish ? '米饭' : '套餐（含米饭）',
       items: [for (final name in names) FavoriteItem(riceDishKey(p, name), name,
         p.pricedByDish ? p.dishPrices[name]! : 0, asset: p.dishPhotos[name] ?? ''),
-        if (side != null) FavoriteItem.entry(side)]));
-  }, '已收藏到“我的喜爱”；重复收藏不会叠加权重。');
+        if (side != null) FavoriteItem.entry(side)]);
+  }
+  Future<void> favoriteRice(RicePlan p, List<String> names, Entry? side) =>
+    toggleFavorite(riceFavoriteMeal(p, names, side));
+  Future<void> resetFavorites() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('重置损坏的收藏？'),
+      content: const Text('请先导出并保存原始数据。重置会清空当前收藏并关闭偏好学习；原文会另存一份本地恢复副本，卸载或清除数据仍会删除副本。'),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('已保存备份，确认重置'))],
+    ));
+    if (confirmed == true && mounted) {
+      await favoriteAction(() => favorites!.resetAfterBackup(), '收藏已重置，原文已保留本地副本');
+    }
+  }
   Widget favoritePage() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
     title('我的喜爱', '保存满意的一顿，随时回看。价格为收藏时记录。'),
     if (favorites!.recoveryRequired) ...[
       const Text('收藏数据无法解析，原文已保留。选餐与菜单仍可使用，收藏写入暂时停用。请导出原始数据后恢复，勿卸载应用。'),
       TextButton(onPressed: exportRecovery, child: const Text('导出原始数据')),
       TextButton(onPressed: load, child: const Text('重新读取')),
+      TextButton(onPressed: resetFavorites, child: const Text('备份后重置收藏')),
     ],
     SwitchListTile(key: const Key('preference-learning'), title: const LText('根据喜爱调整推荐'),
       subtitle: const LText('仅在本机学习。关闭后等概率随机，收藏仍保留。'), value: favorites!.enabled,
@@ -407,9 +433,18 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     final source = storeKey.startsWith('official:') ? repo!.official : repo!.personal;
     final place = source.places.where((p) => '${source.source.name}:${p.id}' == storeKey).firstOrNull;
     if (place != null && place.photo.isNotEmpty) return DishPhoto(data: place.photo, large: !thumbnail);
-    if (!['official:sf','official:community','official:jml','official:btk','official:btz','official:zxb'].contains(storeKey)) return SizedBox(width: thumbnail ? 60 : double.infinity, height: thumbnail ? 56 : 200, child: const ColoredBox(color: Color(0xffeee7df), child: Icon(Icons.storefront)));
+    const images = {
+      'official:sf': 'assets/stores/shiweifang.webp',
+      'official:community': 'assets/stores/community.webp',
+      'official:jml': 'assets/stores/jinmianlang.png',
+      'official:btk': 'assets/stores/baite.jpg',
+      'official:btz': 'assets/stores/baite-chinese.jpg',
+      'official:zxb': 'assets/stores/zhongxiaobei.jpg',
+    };
+    final image = images[storeKey];
+    if (image == null) return SizedBox(width: thumbnail ? 60 : double.infinity, height: thumbnail ? 56 : 200, child: const ColoredBox(color: Color(0xffeee7df), child: Icon(Icons.storefront)));
     return ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.asset(
-      storeKey == 'official:fw' ? 'assets/stores/fengwei.jpg' : storeKey == 'official:zxb' ? 'assets/stores/zhongxiaobei.jpg' : storeKey == 'official:btz' ? 'assets/stores/baite-chinese.jpg' : storeKey == 'official:btk' ? 'assets/stores/baite.jpg' : storeKey == 'official:wy' ? 'assets/stores/wenying.jpg' : storeKey == 'official:sy' ? 'assets/stores/shiyue.jpg' : storeKey == 'official:sf' ? 'assets/stores/shiweifang.webp' : storeKey == 'official:jml' ? 'assets/stores/jinmianlang.png' : 'assets/stores/community.webp', key: ValueKey('${storeKey.split(':').last}-${thumbnail ? 'thumbnail' : 'cover'}'),
+      image, key: ValueKey('${storeKey.split(':').last}-${thumbnail ? 'thumbnail' : 'cover'}'),
       width: thumbnail ? 60 : double.infinity, height: thumbnail ? 56 : 200,
       cacheWidth: thumbnail ? 180 : 1280, fit: BoxFit.cover, alignment: Alignment.topCenter, semanticLabel: '${place?.name ?? '店铺'}店铺实景',
       errorBuilder: (_, error, stackTrace) => const SizedBox(height: 56, child: Icon(Icons.storefront)),
