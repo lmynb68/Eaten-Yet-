@@ -81,6 +81,21 @@ void main() {
     expect(subtitles, isNot(contains('牛肉面中北大学店')));
     expect(tester.takeException(),isNull);
   });
+  testWidgets('whole meal favorite toggles and restores state after navigation', (tester) async {
+    await start(tester, onlyStore: 'sf');
+    await tap(tester, find.text('随机一份'));
+    final button = find.byKey(const Key('meal-favorite'));
+    expect(find.descendant(of: button, matching: find.byIcon(Icons.favorite_border)), findsOneWidget);
+    await tap(tester, button);
+    expect(find.descendant(of: button, matching: find.byIcon(Icons.favorite)), findsOneWidget);
+    expect((await FavoriteStore.load(await SharedPreferences.getInstance())).meals.length, 1);
+    await tap(tester, find.text('我的喜爱').last);
+    await tap(tester, find.text('搭一顿').last);
+    expect(find.descendant(of: button, matching: find.byIcon(Icons.favorite)), findsOneWidget);
+    await tap(tester, button);
+    expect(find.descendant(of: button, matching: find.byIcon(Icons.favorite_border)), findsOneWidget);
+    expect((await FavoriteStore.load(await SharedPreferences.getInstance())).meals, isEmpty);
+  });
   testWidgets('standalone sides have a store filter and can be liked', (tester) async {
     await start(tester);
     await tap(tester,find.byKey(const ValueKey('meal-category-side')));
@@ -112,6 +127,11 @@ void main() {
     final saved=await FavoriteStore.load(await SharedPreferences.getInstance());
     expect(saved.meals.single.items.map((i)=>i.name).toSet(),names.toSet());
     expect(saved.meals.single.ricePrice,100);
+    final button = find.byKey(const Key('meal-favorite'));
+    expect(find.descendant(of: button, matching: find.byIcon(Icons.favorite)), findsOneWidget);
+    await tap(tester, button);
+    expect(find.descendant(of: button, matching: find.byIcon(Icons.favorite_border)), findsOneWidget);
+    expect((await FavoriteStore.load(await SharedPreferences.getInstance())).meals, isEmpty);
     expect(tester.takeException(),isNull);
   });
 }

@@ -124,6 +124,7 @@ const _en = <String,String>{
   '按你的想法挑':'Make it yours', '全部菜单':'All menus',
   '筛选':'Filters', '重置':'Reset',
   '我的喜爱':'Favorites', '米饭选菜':'Rice dishes',
+  '已收藏，再点取消':'Saved, tap to remove',
   '满意，收藏这一顿':'Like and save this meal',
   '根据喜爱调整推荐':'Personalize using favorites',
   '仅在本机学习。关闭后等概率随机，收藏仍保留。':'Learn on this device only. Turn off for uniform random picks; favorites are kept.',

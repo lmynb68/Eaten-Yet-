@@ -34,6 +34,8 @@ class FavoriteMeal {
 /// Local-only, reversible learning. Duplicate saves do not increase evidence.
 class FavoriteStore {
   static const storageKey = 'eat_what.favorites.v1';
+  static const maxMeals = 500;
+  static const maxStorageBytes = 10 * 1024 * 1024;
   final SharedPreferences preferences;
   List<FavoriteMeal> meals;
   bool enabled;
@@ -68,12 +70,21 @@ class FavoriteStore {
     on FormatException { return FavoriteStore._(preferences, [], false)..recoveryRequired = true; }
     on TypeError { return FavoriteStore._(preferences, [], false)..recoveryRequired = true; }
   }
-  Future<void> _update(List<FavoriteMeal> Function() nextMeals, bool Function() nextEnabled) {
+  Future<void> _update(List<FavoriteMeal> Function() nextMeals, bool Function() nextEnabled, {bool enforceLimits = false}) {
     final task = _pending.then((_) async {
       if (recoveryRequired) throw StateError('收藏数据需要恢复，请先导出原始数据；未覆盖原记录');
       final next = nextMeals(), flag = nextEnabled();
-      final ok = await preferences.setString(storageKey, jsonEncode({'version': 1, 'enabled': flag,
-        'meals': next.map((m) => m.toJson()).toList()}));
+      if (enforceLimits && next.length > maxMeals && next.length > meals.length) {
+        throw const FormatException('最多保存500条收藏，请先删除部分记录');
+      }
+      final encoded = jsonEncode({'version': 1, 'enabled': flag,
+        'meals': next.map((m) => m.toJson()).toList()});
+      final previous = preferences.getString(storageKey) ?? '';
+      if (enforceLimits && utf8.encode(encoded).length > maxStorageBytes &&
+          utf8.encode(encoded).length > utf8.encode(previous).length) {
+        throw const FormatException('收藏超过10MB，请先删除部分含照片的记录');
+      }
+      final ok = await preferences.setString(storageKey, encoded);
       if (!ok) throw StateError('喜爱记录保存失败，原记录保留');
       meals = next; enabled = flag; _reindex();
     });
@@ -82,10 +93,32 @@ class FavoriteStore {
   }
   Future<void> save(FavoriteMeal meal) {
     if (meal.items.isEmpty || meal.storeKey.isEmpty) throw const FormatException('请先选好这一顿');
-    return _update(() => [meal, ...meals.where((m) => m.id != meal.id)], () => enabled);
+    return _update(() => [meal, ...meals.where((m) => m.id != meal.id)], () => enabled, enforceLimits: true);
   }
   Future<void> remove(String id) => _update(() => meals.where((m) => m.id != id).toList(), () => enabled);
   Future<void> setEnabled(bool value) => _update(() => [...meals], () => value);
+  /// Only called after the user has exported the original data and confirmed.
+  Future<void> resetAfterBackup() {
+    final task = _pending.then((_) async {
+      // Discard optimistic plugin cache updates from any failed disk write.
+      await preferences.reload();
+      // Native Android preferences also cache failed commits. Never replace an
+      // existing recovery copy with the active value on a retry. Recommit the
+      // same backup and require success before clearing the active record.
+      final original = preferences.getString('$storageKey.recovery') ??
+          preferences.getString(storageKey);
+      if (original != null) {
+        final backedUp = await preferences.setString('$storageKey.recovery', original);
+        if (!backedUp) throw StateError('备份失败，原记录保留');
+      }
+      final ok = await preferences.setString(storageKey,
+        jsonEncode({'version': 1, 'enabled': false, 'meals': []}));
+      if (!ok) throw StateError('重置失败，原记录保留');
+      meals = []; enabled = false; recoveryRequired = false; _reindex();
+    });
+    _pending = task.catchError((Object _) {});
+    return task;
+  }
   double dishWeight(String key) => !enabled ? 1 : 1 + min(2.0, (_dishCounts[key] ?? 0) * .25);
   double pairCoefficient(String a, String b) => !enabled ? 1 : 1 + min(1.0, (_pairCounts[_pairKey(a, b)] ?? 0) * .15);
   double score(Iterable<String> input) {

@@ -32,7 +32,7 @@ class _UpdatePageState extends State<UpdatePage> {
         release = latest;
         if (latest == null) {
           status = '暂无已发布版本';
-        } else if (compareVersions(latest.version, appVersion) <= 0) {
+        } else if (compareVersions(latest.version, '$appVersion+$appBuild') <= 0) {
           status = '当前版本已是最新或高于已发布版本';
         } else if (!android) {
           status = '发现新版本；此设备不支持安卓安装包。';

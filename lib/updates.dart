@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 const appVersion = '1.0.0';
-const appBuild = 25;
+const appBuild = 29;
 const releasesUrl = 'https://github.com/lmynb68/Eaten-Yet-/releases';
 const catalogUrl = 'https://raw.githubusercontent.com/lmynb68/Eaten-Yet-/main/assets/official.json';
 
@@ -31,7 +31,12 @@ int compareVersions(String a, String b) {
   final x=parts(a), y=parts(b);
   if (x == null || y == null) throw const FormatException('版本标签格式无效');
   for(var i=0;i<3;i++) { final c=x[i].compareTo(y[i]);if(c != 0)return c; }
-  return (a.contains('-') ? 0 : 1).compareTo(b.contains('-') ? 0 : 1);
+  final stability = (a.split('+').first.contains('-') ? 0 : 1)
+      .compareTo(b.split('+').first.contains('-') ? 0 : 1);
+  if (stability != 0) return stability;
+  // This project's numeric tag suffix is the Android versionCode.
+  int build(String value) => int.tryParse(value.split('+').skip(1).join('+')) ?? 0;
+  return build(a).compareTo(build(b));
 }
 class AppRelease {
   final String version, notes, url;
