@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'domain.dart';
@@ -98,22 +99,25 @@ class FavoriteStore {
   Future<void> remove(String id) => _update(() => meals.where((m) => m.id != id).toList(), () => enabled);
   Future<void> setEnabled(bool value) => _update(() => [...meals], () => value);
   /// Only called after the user has exported the original data and confirmed.
+  String? _resetOriginal;
   Future<void> resetAfterBackup() {
     final task = _pending.then((_) async {
       // Discard optimistic plugin cache updates from any failed disk write.
       await preferences.reload();
-      // Native Android preferences also cache failed commits. Never replace an
-      // existing recovery copy with the active value on a retry. Recommit the
-      // same backup and require success before clearing the active record.
-      final original = preferences.getString('$storageKey.recovery') ??
-          preferences.getString(storageKey);
+      // Pin this reset's source across retries, even if a failed native commit changed its cache.
+      final original = _resetOriginal ??= preferences.getString(storageKey);
       if (original != null) {
-        final backedUp = await preferences.setString('$storageKey.recovery', original);
+        const firstKey = '$storageKey.recovery';
+        final first = preferences.getString(firstKey);
+        final key = first == null || first == original ? firstKey :
+            '$firstKey.${sha256.convert(utf8.encode(original))}';
+        final backedUp = await preferences.setString(key, original);
         if (!backedUp) throw StateError('备份失败，原记录保留');
       }
       final ok = await preferences.setString(storageKey,
         jsonEncode({'version': 1, 'enabled': false, 'meals': []}));
       if (!ok) throw StateError('重置失败，原记录保留');
+      _resetOriginal = null;
       meals = []; enabled = false; recoveryRequired = false; _reindex();
     });
     _pending = task.catchError((Object _) {});
