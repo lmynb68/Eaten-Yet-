@@ -18,10 +18,15 @@ String clockPeriod(DateTime now, [MealSchedule schedule=const MealSchedule()]) {
   return minutes>=schedule.breakfast && minutes<schedule.lunch ? 'breakfast' : minutes>=schedule.lunch && minutes<schedule.dinner ? 'lunch' : 'dinner';
 }
 Map<String,dynamic> _readMealConfig(SharedPreferences prefs) {
-  final saved=prefs.getString(mealPeriodKey);
-  if(saved==null) return {};
-  if(['auto',...periodNames.keys].contains(saved)) return {'mode':saved};
-  try {final value=jsonDecode(saved);return value is Map<String,dynamic>?value:{};} catch(_) {return {};}
+  try {
+    // Old or damaged preferences can have another supported storage type.
+    // Keep the saved value until the user confirms a replacement in settings.
+    final saved=prefs.get(mealPeriodKey);
+    if(saved is! String) return {};
+    if(['auto',...periodNames.keys].contains(saved)) return {'mode':saved};
+    final value=jsonDecode(saved);
+    return value is Map<String,dynamic>?value:{};
+  } catch(_) {return {};}
 }
 String readMealChoice(SharedPreferences prefs) {
   final value=_readMealConfig(prefs)['mode'];

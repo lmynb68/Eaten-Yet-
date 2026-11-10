@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 const appVersion = '1.0.1';
-const appBuild = 34;
+const appBuild = 35;
 const releasesUrl = 'https://github.com/lmynb68/Eaten-Yet-/releases';
 const catalogUrl = 'https://raw.githubusercontent.com/lmynb68/Eaten-Yet-/main/assets/official.json';
 

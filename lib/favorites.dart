@@ -8,6 +8,20 @@ import 'rice.dart';
 
 String riceDishKey(RicePlan plan, String name) => jsonEncode(['rice', plan.storeKey, plan.location, name]);
 
+String _favoriteText(dynamic value, {bool allowEmpty = false}) {
+  if (value is! String || (!allowEmpty && value.trim().isEmpty)) {
+    throw const FormatException('收藏内容不完整');
+  }
+  return value;
+}
+
+int _favoriteNumber(dynamic value, {int min = 0, int max = 10000000}) {
+  if (value is! int || value < min || value > max) {
+    throw const FormatException('收藏价格或份数无效');
+  }
+  return value;
+}
+
 class FavoriteItem {
   final String key, name, asset, photo;
   final int price, quantity;
@@ -15,16 +29,16 @@ class FavoriteItem {
   factory FavoriteItem.entry(Entry e, {int quantity = 1}) => FavoriteItem(e.key, e.offer.name, e.offer.priceCents, asset: dishAssetForEntry(e), photo: e.offer.photo, quantity: quantity);
   Map<String, dynamic> toJson() => {'key': key, 'name': name, 'price': price, 'asset': asset, 'photo': photo, 'quantity': quantity};
   factory FavoriteItem.fromJson(Map<String, dynamic> j) {
-    final quantity = j['quantity'] ?? 1;
-    if (quantity is! int || quantity < 1 || quantity > 99) throw const FormatException('份数无效');
-    return FavoriteItem(j['key'], j['name'], j['price'], asset: j['asset'] ?? '', photo: j['photo'] ?? '', quantity: quantity);
+    return FavoriteItem(_favoriteText(j['key']), _favoriteText(j['name']),
+      _favoriteNumber(j['price']),
+      asset: _favoriteText(j['asset'] ?? '', allowEmpty: true),
+      photo: _favoriteText(j['photo'] ?? '', allowEmpty: true),
+      quantity: _favoriteNumber(j['quantity'] ?? 1, min: 1, max: 99));
   }
-}
-
-int _baseQuantity(Map<String, dynamic> j) {
-  final n = j['baseQuantity'] ?? 1;
-  if (n is! int || n < 1 || n > 99) throw const FormatException('份数无效');
-  return n;
+  void validate() {
+    _favoriteText(key); _favoriteText(name);
+    _favoriteNumber(price); _favoriteNumber(quantity, min: 1, max: 99);
+  }
 }
 
 class FavoriteMeal {
@@ -39,9 +53,30 @@ class FavoriteMeal {
   int get total => ricePrice * baseQuantity + items.fold<int>(0, (sum, item) => sum + item.price * item.quantity);
   Map<String, dynamic> toJson() => {'storeKey': storeKey, 'storeName': storeName, 'kind': kind,
     'savedAt': savedAt, 'items': items.map((i) => i.toJson()).toList(), 'ricePrice': ricePrice, 'baseLabel': baseLabel, 'baseQuantity': baseQuantity};
-  factory FavoriteMeal.fromJson(Map<String, dynamic> j) => FavoriteMeal(storeKey: j['storeKey'],
-    storeName: j['storeName'], kind: j['kind'], savedAt: j['savedAt'], ricePrice: j['ricePrice'] ?? 0, baseLabel: j['baseLabel'] ?? '米饭', baseQuantity: _baseQuantity(j),
-    items: (j['items'] as List).map((i) => FavoriteItem.fromJson(Map<String, dynamic>.from(i))).toList());
+  factory FavoriteMeal.fromJson(Map<String, dynamic> j) {
+    final rawItems = j['items'];
+    if (rawItems is! List || rawItems.isEmpty || rawItems.length > 200) {
+      throw const FormatException('收藏菜品无效');
+    }
+    return FavoriteMeal(storeKey: _favoriteText(j['storeKey']),
+      storeName: _favoriteText(j['storeName']), kind: _favoriteText(j['kind']),
+      savedAt: _favoriteText(j['savedAt']),
+      ricePrice: _favoriteNumber(j['ricePrice'] ?? 0, max: 990000000),
+      baseLabel: _favoriteText(j['baseLabel'] ?? '米饭', allowEmpty: true),
+      baseQuantity: _favoriteNumber(j['baseQuantity'] ?? 1, min: 1, max: 99),
+      items: rawItems.map((i) {
+        if (i is! Map) throw const FormatException('收藏菜品无效');
+        return FavoriteItem.fromJson(Map<String, dynamic>.from(i));
+      }).toList());
+  }
+  void validate() {
+    _favoriteText(storeKey); _favoriteText(storeName);
+    _favoriteText(kind); _favoriteText(savedAt);
+    _favoriteNumber(ricePrice, max: 990000000);
+    _favoriteNumber(baseQuantity, min: 1, max: 99);
+    if (items.isEmpty || items.length > 200) throw const FormatException('收藏菜品无效');
+    for (final item in items) { item.validate(); }
+  }
 }
 
 /// Local-only, reversible learning. Duplicate saves do not increase evidence.
@@ -105,7 +140,7 @@ class FavoriteStore {
     return task;
   }
   Future<void> save(FavoriteMeal meal) {
-    if (meal.items.isEmpty || meal.storeKey.isEmpty) throw const FormatException('请先选好这一顿');
+    meal.validate();
     return _update(() => [meal, ...meals.where((m) => m.id != meal.id)], () => enabled, enforceLimits: true);
   }
   Future<void> remove(String id) => _update(() => meals.where((m) => m.id != id).toList(), () => enabled);
@@ -117,10 +152,14 @@ class FavoriteStore {
       // Discard optimistic plugin cache updates from any failed disk write.
       await preferences.reload();
       // Pin this reset's source across retries, even if a failed native commit changed its cache.
-      final original = _resetOriginal ??= preferences.getString(storageKey);
+      final raw = preferences.get(storageKey);
+      final original = _resetOriginal ??= raw == null ? null :
+          raw is String ? raw : raw is double && !raw.isFinite
+              ? jsonEncode({'type': 'double', 'value': raw.toString()})
+              : jsonEncode(raw);
       if (original != null) {
         const firstKey = '$storageKey.recovery';
-        final first = preferences.getString(firstKey);
+        final first = preferences.get(firstKey);
         final key = first == null || first == original ? firstKey :
             '$firstKey.${sha256.convert(utf8.encode(original))}';
         final backedUp = await preferences.setString(key, original);
