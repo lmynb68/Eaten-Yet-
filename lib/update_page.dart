@@ -33,16 +33,16 @@ class _UpdatePageState extends State<UpdatePage> {
         if (latest == null) {
           status = '暂无已发布版本';
         } else if (compareVersions(latest.version, '$appVersion+$appBuild') <= 0) {
-          status = '当前版本已是最新或高于已发布版本';
+          status = '已是最新版本';
         } else if (!android) {
           status = '发现新版本；此设备不支持安卓安装包。';
         } else {
           asset = latest.installer(abis);
-          status = asset == null ? '新版本尚未提供适用且带校验值的安装包，请稍后重试。' : '发现新版本，可直接在应用内下载更新。';
+          status = asset == null ? '新版本还没准备好适合这台手机的安装包，请稍后再试。' : '发现新版本，可直接在应用内下载更新。';
         }
       });
     } catch (_) {
-      if (mounted) setState(() => status = '检查失败，请确认网络可连接更新服务器后重试。');
+      if (mounted) setState(() => status = '检查更新失败，请检查网络后再试。');
     } finally { if (mounted) setState(() => busy = false); }
   }
 
@@ -59,15 +59,15 @@ class _UpdatePageState extends State<UpdatePage> {
         if (mounted) setState(() => received = bytes);
       });
       download = null;
-      if (mounted) setState(() => status = '下载完成，正在校验安装包…');
+      if (mounted) setState(() => status = '下载完成，正在检查安装包…');
       await updateChannel.invokeMethod<void>('verify', {'sha256': selected.sha256, 'size': selected.size});
       if (!mounted) return;
       ready = true;
       await install();
     } on UpdateCancelled {
       if (mounted) setState(() => status = '下载已取消，可以重新下载。');
-    } on PlatformException catch (e) {
-      if (mounted) setState(() => status = e.message ?? '安装包处理失败，请重新下载。');
+    } on PlatformException {
+      if (mounted) setState(() => status = '安装包处理失败，请重新下载。');
     } catch (_) {
       if (mounted) setState(() => status = '下载失败或文件不完整。请检查网络和剩余空间后重试。');
     } finally {
@@ -86,7 +86,7 @@ class _UpdatePageState extends State<UpdatePage> {
     } on PlatformException catch (e) {
       if (mounted) setState(() {
         if (e.code == 'VERIFY') ready = false;
-        status = e.message ?? '无法启动安装，请重试。';
+        status = '无法启动安装，请重试。';
       });
     } finally { if (mounted) setState(() => busy = false); }
   }
@@ -106,7 +106,7 @@ class _UpdatePageState extends State<UpdatePage> {
           const SizedBox(height: 16),
           LinearProgressIndicator(value: download != null && asset != null ? received / asset!.size : null),
           if (download != null && asset != null) ...[
-            Text('${(received / 1048576).toStringAsFixed(1)} / ${(asset!.size / 1048576).toStringAsFixed(1)} MiB'),
+            Text('${(received / 1000000).toStringAsFixed(1)} / ${(asset!.size / 1000000).toStringAsFixed(1)} MB'),
             TextButton(onPressed: () {
               download?.cancel();
               setState(() => status = '正在取消下载…');
@@ -119,13 +119,13 @@ class _UpdatePageState extends State<UpdatePage> {
         ],
         if (asset != null) ...[
           const SizedBox(height: 24),
-          Text('${asset!.name}\n${(asset!.size / 1048576).toStringAsFixed(1)} MiB'),
+          Text('${asset!.name}\n${(asset!.size / 1000000).toStringAsFixed(1)} MB'),
           const SizedBox(height: 12),
           FilledButton(onPressed: busy ? null : ready ? install : startDownload,
               child: LText(ready ? '继续安装' : '下载并安装更新')),
         ],
         const SizedBox(height: 24),
-        const LText('下载安装包后会校验完整性与签名，再由系统询问是否安装。正常覆盖升级保留本地数据，建议更新前导出重要个人菜单。'),
+        const LText('下载后会先检查安装包是否完整，再由系统确认安装。'),
       ])),
   );
 }

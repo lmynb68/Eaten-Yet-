@@ -13,6 +13,9 @@ import 'meal_filter.dart';
 import 'language.dart';
 import 'official_library.dart';
 import 'favorites.dart';
+import 'history.dart';
+import 'history_page.dart';
+import 'quantity.dart';
 import 'filter_sheet.dart';
 import 'navigation_order.dart';
 
@@ -28,6 +31,8 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   bool mealPromptOpen=false;
   MenuRepository? repo;
   FavoriteStore? favorites;
+  HistoryStore? history;
+  int quantity=1, snackQuantity=1;
   String mainMode = 'main';
   String? sideStore;
   String? catalogStore;
@@ -55,28 +60,27 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   @override
   void dispose() { mealTimer?.cancel(); WidgetsBinding.instance.removeObserver(this); budget.dispose(); super.dispose(); }
   Future<void> load() async {
-    try { final r = await MenuRepository.load(); final f = await FavoriteStore.loadAvailable(r.preferences); if (mounted) setState(() { favorites = f; repo = r; mealChoice=readMealChoice(r.preferences); currentPeriod=mealChoice=="auto"?clockPeriod(DateTime.now(),readMealSchedule(r.preferences)):mealChoice; navigationOrder = readNavigationOrder(r.preferences); loadError = null; });
+    try { final r = await MenuRepository.load(); final f = await FavoriteStore.loadAvailable(r.preferences); final h = await HistoryStore.load(r.preferences); if (mounted) setState(() { history=h; favorites = f; repo = r; mealChoice=readMealChoice(r.preferences); currentPeriod=mealChoice=="auto"?clockPeriod(DateTime.now(),readMealSchedule(r.preferences)):mealChoice; navigationOrder = readNavigationOrder(r.preferences); loadError = null; });
       if(mounted) scheduleMealClock();
       if(mounted && !hasMealChoice(r.preferences) && !mealPromptOpen) {
         WidgetsBinding.instance.addPostFrameCallback((_) {if(mounted) configureMeal(first:true);});
       }
     }
-    catch (e) { if (mounted) setState(() => loadError = '菜单加载失败，未覆盖本地数据：$e'); }
+    catch (e) { if (mounted) setState(() => loadError = '菜单暂时打不开，本机数据已保留。请重试。'); }
   }
   Future<void> exportRecovery() async {
     try {
       final text = await MenuRepository.exportRecoveryData();
       if (!mounted) return;
       await showDialog<void>(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('导出原始数据'),
-        content: const Text('此恢复文件包含本机个人数据，请私下保存，不要提交到公开反馈。它不修改现有数据，也不能直接当作菜单库导入。'),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+        title: const LText('导出备份（排障用）'),
+        content: const LText('排障备份包含本机个人数据，仅供排查问题，请私下保存。不能作为菜单文件导入。'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const LText('取消')),
           TextButton(onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: text));
-            if (ctx.mounted) Navigator.pop(ctx);
-          }, child: const Text('复制原始数据'))]));
+            try { await Clipboard.setData(ClipboardData(text: text)); if (ctx.mounted) Navigator.pop(ctx); } catch (_) { notify('复制失败，请重试。'); }
+          }, child: const LText('复制排障备份'))]));
     } catch (_) {
-      if (mounted) setState(() => loadError = '无法读取原始数据，请保留应用，不要卸载或清除数据。');
+      if (mounted) setState(() => loadError = '原数据暂时读不出来，请稍后重试。');
     }
   }
   Future<void> reorderNavigation(int oldIndex, int newIndex) async {
@@ -109,9 +113,9 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     setState(() {currentPeriod=next; resetMealSelection();});
   }
   void resetMealSelection() {
-    selection=[null,null,null]; snack=null; standaloneSide=null; mealStore=null; sideStore=null;
+    quantity=1; snackQuantity=1; selection=[null,null,null]; snack=null; standaloneSide=null; mealStore=null; sideStore=null;
     mealFilter=null; mealCategory='main'; mainMode='main'; filterRevision++;
-    message='已切换到${periodNames[currentPeriod]}，请重新选择餐品。';
+    message='用餐时间已切换，请重新选择餐品。';
   }
   Future<void> configureMeal({bool first=false, BuildContext? dialogContext}) async {
     if(mealPromptOpen || repo==null) return;
@@ -132,9 +136,9 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     setState(() => busy = true);
     try { await repo!.replace(db); if (mounted) setState(() {
       snack = null; selection = [null,null,null]; standaloneSide=null; sideStore=null; filterRevision++;
-      message = '菜单已更新；请重新生成。已有锁定项会核对价格和来源。';
+      message = '菜单已更新，请重新选一次。';
     }); return true; }
-    catch (e) { notify('保存失败：$e'); return false; }
+    catch (e) { notify(friendlySaveError(e)); return false; }
     finally { if (mounted) setState(() => busy = false); }
   }
   List<Entry> get wholeMeals => pool.where((e) => (mealCategory != 'main' || mealStore == null || e.placeKey == mealStore) && (mealCategory != 'side' || sideStore == null || e.placeKey == sideStore) && (mealCategory != 'main' || matchesMealFilter(mealFilter, e.key)) && e.offer.kind == mealCategory && (mealCategory != 'main' || stapleFilter == 'all' || e.offer.stapleType == stapleFilter) && !e.offer.addonOnly && e.offer.available &&
@@ -142,9 +146,10 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   void draw() {
     final cents = parseMoney(budget.text);
     if (cents == null || cents <= 0) { setState(() => message = '请输入有效预算'); return; }
-    final candidates = wholeMeals.where((e) => mealCostWithSnack(e, snack) <= cents && e.key != (mealCategory == 'side' ? standaloneSide : selection[0])?.key).toList();
+    final candidates = wholeMeals.where((e) => mealCostWithSnack(e, mealCategory == 'side' ? null : snack, snackQuantity: snackQuantity) <= cents && e.key != (mealCategory == 'side' ? standaloneSide : selection[0])?.key).toList();
     setState(() {
       if (candidates.isEmpty) { message = '预算内没有新的可选餐品；原选择保留。'; return; }
+      quantity=1;
       final picked = weightedPick(candidates, random, (e) => favorites!.score([e.key, if (snack?.placeKey == e.placeKey) snack!.key]));
       if (snack?.placeKey != picked.placeKey) snack = null;
       if (mealCategory == 'side') { standaloneSide = picked; } else { selection = [picked, null, null]; }
@@ -154,15 +159,15 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   Future<void> chooseWhole() async {
     final cents = parseMoney(budget.text);
     if (cents == null || cents <= 0) { setState(() => message='请输入有效预算'); return; }
-    final choices = wholeMeals.where((e) => mealCostWithSnack(e, snack) <= cents).toList();
+    final choices = wholeMeals.where((e) => mealCostWithSnack(e, mealCategory == 'side' ? null : snack, snackQuantity: snackQuantity) <= cents).toList();
     final chosen = await showDialog<Entry>(context: context, builder: (ctx) => AlertDialog(
       title: const LText('预算内手选一份'), content: SizedBox(width: 520, height: 420,
         child: choices.isEmpty ? const LText('预算内没有餐品') : ListView.builder(itemCount: choices.length,
-          itemBuilder: (ctx,i) => ListTile(leading: DishPhoto(asset: dishAssetForEntry(choices[i]), data: choices[i].offer.photo), title: LText(choices[i].offer.name),
+          itemBuilder: (ctx,i) => ListTile(leading: DishPhoto(asset: dishAssetForEntry(choices[i]), data: choices[i].offer.photo), title: Text(choices[i].offer.name),
             subtitle: LText('${choices[i].place.name} ${choices[i].offer.window} · ¥${money(choices[i].offer.priceCents)}'),
             onTap: () => Navigator.pop(ctx,choices[i])))),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const LText('取消'))]));
-    if (chosen != null && mounted && chosen.offer.mealPeriods.contains(currentPeriod)) setState(() { if (snack?.placeKey != chosen.placeKey) snack=null; if (mealCategory == 'side') { standaloneSide=chosen; } else { selection=[chosen,null,null]; } message=mealCategory == 'side' ? '已手选小食。' : '已手选整份餐品。'; });
+    if (chosen != null && mounted && chosen.offer.mealPeriods.contains(currentPeriod)) setState(() { quantity=1; if (snack?.placeKey != chosen.placeKey) snack=null; if (mealCategory == 'side') { standaloneSide=chosen; } else { selection=[chosen,null,null]; } message=mealCategory == 'side' ? '已手选小食。' : '已手选整份餐品。'; });
   }
   Map<String,String> get storeChoices => {
     if (scope != Scope.personal) for (final p in repo!.activeOfficial.places) 'official:${p.id}': p.name,
@@ -191,17 +196,17 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     return save(MenuDb(source: db.source, revision: db.revision+1, places: db.places,
       foods: db.foods, offers: db.offers, ricePlans: [...db.ricePlans.where((p) => p.id != plan.id),plan]));
   }
-  Widget title(String heading, String detail) => Padding(padding: const EdgeInsets.only(bottom: 18),
+  Widget title(String heading, String detail, {bool translate = true}) => Padding(padding: const EdgeInsets.only(bottom: 18),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      LText(heading, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-      const SizedBox(height: 6), LText(detail, style: const TextStyle(color: Color(0xff70665c))),
+      Text(translate ? tr(context, heading) : heading, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+      const SizedBox(height: 6), Text(translate ? tr(context, detail) : detail, style: const TextStyle(color: Color(0xff70665c))),
     ]));
   Widget scopePicker() => DropdownButtonFormField<Scope>(key: ValueKey(scope), initialValue: scope, isExpanded: true,
-    decoration: InputDecoration(labelText: tr(context, '使用哪个菜单库')),
-    items: const [DropdownMenuItem(value: Scope.merged, child: LText('官方库 + 个人库', overflow: TextOverflow.ellipsis)),
-      DropdownMenuItem(value: Scope.official, child: LText('仅官方库')),
-      DropdownMenuItem(value: Scope.personal, child: LText('仅个人库'))],
-    onChanged: (v) => setState(() { scope = v!; mealStore=null; catalogStore=null; standaloneSide=null; sideStore=null; mealFilter=null; filterRevision++; selectedStore=null; snack=null; selection=[null,null,null]; message = '范围已改变；重新生成时会检查锁定项。'; }));
+    decoration: InputDecoration(labelText: tr(context, '菜单范围')),
+    items: const [DropdownMenuItem(value: Scope.merged, child: LText('全部菜单', overflow: TextOverflow.ellipsis)),
+      DropdownMenuItem(value: Scope.official, child: LText('官方菜单')),
+      DropdownMenuItem(value: Scope.personal, child: LText('我的菜单'))],
+    onChanged: (v) => setState(() { scope = v!; mealStore=null; catalogStore=null; standaloneSide=null; sideStore=null; mealFilter=null; filterRevision++; selectedStore=null; snack=null; selection=[null,null,null]; message = '已切换菜单范围。'; }));
   Widget staplePicker() => Padding(padding: const EdgeInsets.only(bottom: 12), child: Wrap(spacing: 8, children: [
     for (final item in {'all': '全部主食', ...stapleNames}.entries) ChoiceChip(
       label: LText(item.value), selected: stapleFilter == item.key, onSelected: (_) => setState(() {
@@ -244,17 +249,17 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   }
   Widget filterSummary({required bool browsing}) {
     final store = browsing ? catalogStore : mealStore;
-    final source = scope == Scope.merged ? '全部菜单' : scope == Scope.official ? '仅官方库' : '仅个人库';
+    final source = scope == Scope.merged ? '全部菜单' : scope == Scope.official ? '官方菜单' : '我的菜单';
     return Padding(padding: const EdgeInsets.only(bottom: 16), child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [Expanded(child: LText(browsing ? '按条件查找' : '按你的想法挑', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
           TextButton.icon(key: ValueKey(browsing ? 'catalog-filters' : 'meal-filters'),
             onPressed: () => editFilters(browsing: browsing), icon: const Icon(Icons.tune, size: 17), label: const LText('筛选'))]),
         SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
-          for (final text in [storeChoices[store] ?? '全部店铺', if (browsing || mealCategory != 'rice') stapleNames[stapleFilter] ?? '全部主食', source,
-            if (!browsing && mealFilter != null) '已勾选主餐：${mealFilter!.length}'])
+          for (final text in [storeChoices[store] ?? tr(context, '全部店铺'), if (browsing || mealCategory != 'rice') tr(context, stapleNames[stapleFilter] ?? '全部主食'), tr(context, source),
+            if (!browsing && mealFilter != null) tr(context, '已勾选主餐：{count}', params: {'count': mealFilter!.length})])
             Padding(padding: const EdgeInsets.only(right: 8), child: ActionChip(
-              label: LText(text, style: const TextStyle(fontSize: 12)),
+              label: Text(text, style: const TextStyle(fontSize: 12)),
               onPressed: () => editFilters(browsing: browsing))),
         ])),
       ]));
@@ -265,14 +270,14 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     final attachedSide = mealCategory == 'side' && mainMode == 'main' && selection[0] != null;
     final plans = ricePlans.where((p) => (mealStore == null || riceStoreKey(p.$2, storeChoices) == mealStore) && matchesMealFilter(mealFilter, 'rice:${p.$1}')).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      title('今天，吃什么？', '先选主菜，再搭配同店小食。'),
-      Padding(padding:const EdgeInsets.only(bottom:12),child:Text('当前：${periodNames[currentPeriod]} · ${mealChoice=="auto"?"跟随系统时间":"手动模式"}')),
+      title('今天，吃什么？', '先选主菜，再决定要不要加小食。'),
+      Padding(padding:const EdgeInsets.only(bottom:12),child:LText('当前：{meal} · {mode}', params: {'meal': tr(context, periodNames[currentPeriod]!), 'mode': tr(context, mealChoice == 'auto' ? '跟随系统时间' : '手动模式')})),
       Container(padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 18),
         decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
         child: TextField(controller: budget, onChanged: (_) => setState(() {}),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: Color(0xff914f35)),
-          decoration: InputDecoration(labelText: tr(context, '本顿预算'), prefixText: '¥ ', border: InputBorder.none,
+          decoration: InputDecoration(labelText: tr(context, '这一顿的预算'), prefixText: '¥ ', border: InputBorder.none,
             enabledBorder: InputBorder.none, focusedBorder: InputBorder.none, contentPadding: EdgeInsets.zero))),
       SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(spacing: 8, children: [
         for (final item in [('main','整份餐品'), if (plans.isNotEmpty) ('rice','米饭选菜'),('side','小食')])
@@ -281,15 +286,15 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
               if (item.$1 != 'side' && mainMode != item.$1) {
                 mainMode=item.$1; snack=null; selection=[null,null,null]; filterRevision++;
               }
-              mealCategory=item.$1; message=item.$1 == 'side' && selection[0] == null && mainMode != 'rice' ? '可在所选店铺内随机或手选小食。' : '主菜确定后，小食仅从同店选择。';
+              mealCategory=item.$1; message=item.$1 == 'side' && selection[0] == null && mainMode != 'rice' ? '挑一份小食。' : '';
             })),
       ])),
       const SizedBox(height: 12),
       if (mealCategory != 'side') filterSummary(browsing: false),
       if (mealCategory == 'side') ...[
         if (riceMode || attachedSide)
-          TextButton(onPressed: () => setState(() { mainMode='side'; message='可在所选店铺内随机或手选小食。'; snack=null; selection=[null,null,null]; standaloneSide=null; filterRevision++; }),
-            child: const LText('只买小食（结束当前搭配）'))
+          TextButton(onPressed: () => setState(() { mainMode='side'; message='挑一份小食。'; snack=null; selection=[null,null,null]; standaloneSide=null; filterRevision++; }),
+            child: const LText('只买小食'))
         else ...[
           const SizedBox(height: 8),
           const LText('单独买小食', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
@@ -297,7 +302,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
           const LText('先选店铺，再挑一份喜欢的小食。', style: TextStyle(fontSize: 12, color: Color(0xff777972))),
           const SizedBox(height: 20),
           DropdownButtonFormField<String>(key: ValueKey('side-store-$sideStore'), initialValue: sideStore ?? '',
-            isExpanded: true, decoration: const InputDecoration(labelText: '小食店铺'),
+            isExpanded: true, decoration: InputDecoration(labelText: tr(context, '小食店铺')),
             items: [const DropdownMenuItem(value: '', child: LText('全部店铺')),
               for (final store in storeChoices.entries) DropdownMenuItem(value: store.key, child: Text(store.value))],
             onChanged: (v) => setState(() { sideStore=v == '' ? null : v; standaloneSide=null; })),
@@ -306,14 +311,14 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
       ],
       if (riceMode) RicePanel(key: ValueKey('rice-filter-$filterRevision'), stores: storeChoices,
         plans: plans, budget: parseMoney(budget.text), savePersonal: saveRice, snacks: pool,
-        preferences: favorites, onFavorite: favoriteRice, favoriteBusy: busy,
+        preferences: favorites, onMealFavorite: toggleFavorite, isMealFavorite: isFavorite, onRecord: recordMeal, onFavorite: favoriteRice, favoriteBusy: busy,
         isFavorite: (p, names, side) => isFavorite(riceFavoriteMeal(p, names, side)), snacksOnly: mealCategory == 'side')
       else if (attachedSide) ...[
-        LText('当前主菜：${selection[0]!.offer.name} · ${selection[0]!.place.name}'),
-        wholeSnackPanel(selection[0]!), favoriteButton(selection[0]!),
+        LText('当前主菜：{dish} · {store}', params: {'dish': selection[0]!.offer.name, 'store': selection[0]!.place.name}),
+        QuantityPicker(value: quantity, onChanged: (n) => setState(() => quantity=n)), wholeSnackPanel(selection[0]!), favoriteButton(selection[0]!),
       ]
       else ...[
-        if (chosen != null && (chosen.offer.priceCents + (snack?.offer.priceCents ?? 0)) > (parseMoney(budget.text) ?? 0))
+        if (chosen != null && mealCostWithSnack(chosen, mealCategory == 'side' ? null : snack, quantity: quantity, snackQuantity: snackQuantity) > (parseMoney(budget.text) ?? 0))
           const LText('当前选择超出新预算，请重新选择。',style: TextStyle(color: Colors.red)),
         FilledButton.icon(onPressed: draw,icon: const Icon(Icons.shuffle), label: LText(mealCategory == 'side' ? '随机小食' : '随机一份')),
         TextButton(onPressed: chooseWhole, child: LText(mealCategory == 'side' ? '自己选小食' : '自己选一份')),
@@ -324,26 +329,28 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
             if (chosen.offer.photo.isNotEmpty || dishAssetForEntry(chosen).isNotEmpty) ...[
               DishPhoto(asset: dishAssetForEntry(chosen), data: chosen.offer.photo, large: true), const SizedBox(height: 12)],
             Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: LText(chosen.offer.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
+              Expanded(child: Text(chosen.offer.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
               const SizedBox(width: 12), LText('¥${money(chosen.offer.priceCents)}', style: const TextStyle(color: Color(0xff914f35), fontWeight: FontWeight.w600)),
             ]), const SizedBox(height: 6),
-            LText('${chosen.place.name} ${chosen.offer.window}', style: const TextStyle(fontSize: 12, color: Color(0xff777972))),
+            Text('${chosen.place.name} ${chosen.offer.window}', style: const TextStyle(fontSize: 12, color: Color(0xff777972))),
           ])))),
 
+        if (chosen != null) QuantityPicker(value: quantity, onChanged: (n) => setState(() => quantity=n)),
+        if (chosen != null && mealCategory == 'side') Text('${tr(context, "合计")} ¥${money(chosen.offer.priceCents*quantity)}'),
         if (mealCategory == 'main' && chosen != null) wholeSnackPanel(chosen),
         if (chosen != null) favoriteButton(chosen),
       ],
-      const SizedBox(height: 12), const LText('基础数据来自10月15日；社区食堂更新于10月16日。预算不含打包、配送费用。', style: TextStyle(fontSize: 11, color: Color(0xff777972))),
+      const SizedBox(height: 12), const LText('价格来自现场记录，可能变动，以店内为准。', style: TextStyle(fontSize: 11, color: Color(0xff777972))),
     ]);
   }
   Widget wholeSnackPanel(Entry main) => SnackPanel(placeKey: main.placeKey, pool: pool,
-    budget: parseMoney(budget.text), mainPrice: main.offer.priceCents, selected: snack,
-    weight: (e) => favorites!.score([main.key, e.key]), onChanged: (v) => setState(() => snack=v));
+    budget: parseMoney(budget.text), mainPrice: main.offer.priceCents*quantity, selected: snack, quantity: snackQuantity, onQuantityChanged: (n) => setState(() => snackQuantity=n),
+    weight: (e) => favorites!.score([main.key, e.key]), onChanged: (v) => setState(() { snack=v; snackQuantity=1; }));
   Future<void> favoriteAction(Future<void> Function() action, String success) async {
     if (busy) return;
     setState(() => busy=true);
     try { await action(); if (mounted) { setState(() {}); notify(success); } }
-    catch (e) { notify('保存失败：$e'); }
+    catch (e) { notify(friendlySaveError(e)); }
     finally { if (mounted) setState(() => busy=false); }
   }
   bool isFavorite(FavoriteMeal meal) => favorites!.meals.any((m) => m.id == meal.id);
@@ -355,13 +362,14 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   Widget favoriteButton(Entry main) {
     final meal = FavoriteMeal(
       storeKey: main.placeKey, storeName: main.place.name, kind: main.offer.kind == 'side' ? '小食' : '整份餐品',
-      savedAt: DateTime.now().toIso8601String(), items: [FavoriteItem.entry(main),
-        if (main.offer.kind != 'side' && snack?.placeKey == main.placeKey) FavoriteItem.entry(snack!)]);
+      savedAt: DateTime.now().toIso8601String(), items: [FavoriteItem.entry(main,quantity: quantity),
+        if (main.offer.kind != 'side' && snack?.placeKey == main.placeKey) FavoriteItem.entry(snack!,quantity: snackQuantity)]);
     final saved = isFavorite(meal);
-    return OutlinedButton.icon(key: const Key('meal-favorite'),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children:[OutlinedButton.icon(key: const Key('meal-favorite'),
       icon: Icon(saved ? Icons.favorite : Icons.favorite_border),
       label: LText(saved ? '已收藏，再点取消' : '满意，收藏这一顿'),
-      onPressed: busy ? null : () => toggleFavorite(meal));
+      onPressed: busy ? null : () => toggleFavorite(meal)),
+      TextButton.icon(onPressed: busy ? null : () => recordMeal(meal), icon: const Icon(Icons.history), label: const LText('记录这一顿'))]);
   }
   FavoriteMeal riceFavoriteMeal(RicePlan p, List<String> names, Entry? side) {
     final store = riceStoreKey(p, storeChoices);
@@ -374,49 +382,64 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   }
   Future<void> favoriteRice(RicePlan p, List<String> names, Entry? side) =>
     toggleFavorite(riceFavoriteMeal(p, names, side));
+  Future<void> recordMeal(FavoriteMeal meal) async {
+    if (busy || history == null) return;
+    final review = await showMealReview(context);
+    if (review != null && mounted) await favoriteAction(() => history!.add(meal,stars:review.$1,review:review.$2), '已记录这一顿');
+  }
   Future<void> resetFavorites() async {
     final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('重置损坏的收藏？'),
-      content: const Text('请先导出并保存原始数据。重置会清空当前收藏并关闭偏好学习；原文会另存一份本地恢复副本，卸载或清除数据仍会删除副本。'),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('已保存备份，确认重置'))],
+      title: const LText('收藏读取失败，要清空重来吗？'),
+      content: const LText('清空后，这些收藏会从列表移除。请先导出一份备份。'),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LText('取消')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const LText('已保存备份，确认重置'))],
     ));
     if (confirmed == true && mounted) {
-      await favoriteAction(() => favorites!.resetAfterBackup(), '收藏已重置，原文已保留本地副本');
+      await favoriteAction(() => favorites!.resetAfterBackup(), '收藏已清空，原数据已另存一份。');
     }
   }
   Widget favoritePage() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    title('我的喜爱', '保存满意的一顿，随时回看。价格为收藏时记录。'),
+    title('我的喜爱', '保存满意的一顿，随时回看。记录的是收藏时的价格。'),
+    TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => HistoryPage(store: history!))), icon: const Icon(Icons.history), label: const LText('用餐历史')),
     if (favorites!.recoveryRequired) ...[
-      const Text('收藏数据无法解析，原文已保留。选餐与菜单仍可使用，收藏写入暂时停用。请导出原始数据后恢复，勿卸载应用。'),
-      TextButton(onPressed: exportRecovery, child: const Text('导出原始数据')),
-      TextButton(onPressed: load, child: const Text('重新读取')),
-      TextButton(onPressed: resetFavorites, child: const Text('备份后重置收藏')),
+      const LText('收藏读取失败，数据还在。你仍然可以选餐，收藏功能暂时停用。'),
+      TextButton(onPressed: exportRecovery, child: const LText('导出备份（排障用）')),
+      TextButton(onPressed: load, child: const LText('重新读取')),
+      TextButton(onPressed: resetFavorites, child: const LText('备份后重置收藏')),
     ],
     SwitchListTile(key: const Key('preference-learning'), title: const LText('根据喜爱调整推荐'),
-      subtitle: const LText('仅在本机学习。关闭后等概率随机，收藏仍保留。'), value: favorites!.enabled,
-      onChanged: (v) => favoriteAction(() => favorites!.setEnabled(v), v ? '已开启偏好加权' : '已恢复等概率随机')),
+      subtitle: const LText('偏好只保存在本机。关闭后随机推荐，收藏不受影响。'), value: favorites!.enabled,
+      onChanged: (v) => favoriteAction(() => favorites!.setEnabled(v), v ? '推荐会参考你的收藏' : '已切换为随机推荐')),
     if (!favorites!.recoveryRequired && favorites!.meals.isEmpty) const Padding(padding: EdgeInsets.all(20), child: LText('还没有喜爱记录。选好后点击“满意，收藏这一顿”。')),
     for (final meal in favorites!.meals) Card(key: ValueKey('favorite:${meal.id}'), child: Padding(
       padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        ListTile(contentPadding: EdgeInsets.zero, title: Text('${meal.storeName} · ${meal.kind}'),
+        ListTile(contentPadding: EdgeInsets.zero, title: Text('${meal.storeName} · ${tr(context, meal.kind)}'),
           subtitle: Text(meal.savedAt.replaceFirst('T', ' ').split('.').first),
-          trailing: IconButton(tooltip: '删除喜爱记录', icon: const Icon(Icons.delete_outline),
-            onPressed: () => favoriteAction(() => favorites!.remove(meal.id), '已删除，也已撤销这条记录的加权影响'))),
-        for (final item in meal.items) ListTile(leading: DishPhoto(asset: item.asset, data: item.photo), title: Text(item.name),
-          trailing: item.price > 0 ? Text('¥${money(item.price)}') : null),
-        if (meal.ricePrice > 0) Text('${meal.baseLabel} ¥${money(meal.ricePrice)}'),
-        Text('收藏时合计 ¥${money(meal.total)}'),
+          trailing: IconButton(tooltip: tr(context, '删除喜爱记录'), icon: const Icon(Icons.delete_outline),
+            onPressed: () => favoriteAction(() => favorites!.remove(meal.id), '已取消收藏，推荐不再参考这条。'))),
+        for (final item in meal.items) ListTile(leading: DishPhoto(asset: item.asset, data: item.photo), title: Text('${item.name} × ${item.quantity}'),
+          trailing: item.price > 0 ? Text('¥${money(item.price*item.quantity)}') : null),
+        if (meal.ricePrice > 0) Text('${tr(context, meal.baseLabel)} × ${meal.baseQuantity} ¥${money(meal.ricePrice*meal.baseQuantity)}'),
+        LText('收藏时合计 ¥{price}', params: {'price': money(meal.total)}),
       ]))),
   ]);
-  void detail(Entry e) {
-    showDialog<void>(context: context, builder: (ctx) => AlertDialog(title: LText(e.offer.name),
+  Future<void> detail(Entry e) async {
+    var count = 1;
+    final selected = await showDialog<int>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(title: Text(e.offer.name),
       content: SizedBox(width: 440, child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         DishPhoto(asset: dishAssetForEntry(e), data: e.offer.photo, large: true), const SizedBox(height: 16),
-        LText('${e.place.name} · ${e.place.area}\n${e.offer.portion} · ¥${money(e.offer.priceCents)}\n价格记录：${e.offer.updatedAt}\n${e.offer.available ? '库内标记：在售（非实时）' : '已下架'}'),
-        const SizedBox(height: 12), LText('${kindNames[e.offer.kind]} · ${e.offer.window}${e.offer.channel == 'douyin' ? ' · 抖音团购' : ''}\n${e.offer.notes}\n来源：${e.offer.evidence}\n拍摄日期：${e.offer.observedAt.isEmpty ? '截图未显示' : e.offer.observedAt}'),
+        Text('${e.place.name} · ${e.place.area}\n${e.offer.portion} · ¥${money(e.offer.priceCents)}'),
+        if (!e.offer.available) const LText('已下架'),
+        const SizedBox(height: 12), Text('${tr(context, kindNames[e.offer.kind]!)} · ${e.offer.window}${e.offer.channel == 'douyin' ? ' · ${tr(context, '抖音团购')}' : ''}'),
+        if (e.offer.notes.isNotEmpty) Text(e.offer.notes),
+        const LText('价格可能有变动，以店内为准。'),
+        if (DateTime.tryParse(e.offer.updatedAt) case final date?) Text('${tr(context, '信息更新于')} ${MaterialLocalizations.of(context).formatMediumDate(date)}', style: Theme.of(context).textTheme.bodySmall),
         if (e.offer.example) const LText('这是示例数据，不是真实菜单。'),
-      ]))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const LText('关闭'))]));
+        QuantityPicker(value: count, onChanged: (n) => refresh(() => count=n)),
+        Text('${tr(ctx, '合计')} ¥${money(e.offer.priceCents*count)}'),
+      ]))), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const LText('关闭')),
+        TextButton(onPressed: () => Navigator.pop(ctx,count), child: const LText('记录这一顿'))])));
+    if (selected != null && mounted) await recordMeal(FavoriteMeal(storeKey:e.placeKey,storeName:e.place.name,kind:kindNames[e.offer.kind]!,savedAt:DateTime.now().toIso8601String(),items:[FavoriteItem.entry(e,quantity:selected)]));
   }
   bool matchesCategory(Entry e) => (browseCategory == 'all' ||
     e.offer.kind == browseCategory && (browseCategory != 'side' || !e.offer.addonOnly)) &&
@@ -434,6 +457,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     final place = source.places.where((p) => '${source.source.name}:${p.id}' == storeKey).firstOrNull;
     if (place != null && place.photo.isNotEmpty) return DishPhoto(data: place.photo, large: !thumbnail);
     const images = {
+      'official:mg': 'assets/stores/maigang.webp',
       'official:sf': 'assets/stores/shiweifang.webp',
       'official:community': 'assets/stores/community.webp',
       'official:jml': 'assets/stores/jinmianlang.png',
@@ -446,7 +470,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     return ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.asset(
       image, key: ValueKey('${storeKey.split(':').last}-${thumbnail ? 'thumbnail' : 'cover'}'),
       width: thumbnail ? 60 : double.infinity, height: thumbnail ? 56 : 200,
-      cacheWidth: thumbnail ? 180 : 1280, fit: BoxFit.cover, alignment: Alignment.topCenter, semanticLabel: '${place?.name ?? '店铺'}店铺实景',
+      cacheWidth: thumbnail ? 180 : 1280, fit: BoxFit.cover, alignment: Alignment.topCenter, semanticLabel: tr(context, '{store}店铺实景', params: {'store': place?.name ?? tr(context, '店铺')}),
       errorBuilder: (_, error, stackTrace) => const SizedBox(height: 56, child: Icon(Icons.storefront)),
     ));
   }
@@ -461,13 +485,20 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   Widget riceDishTile((RicePlan, String) item) {
     final (p, name) = item;
     return Card(key: ValueKey('rice-dish:${p.storeKey}:${p.id}:$name'), child: ListTile(leading: DishPhoto(asset: p.dishPhotos[name] ?? ''),
-      title: LText(name), subtitle: LText('${p.location} · 米饭另计 ¥${money(p.priceCents)}'),
-      trailing: Text('¥${money(p.dishPrices[name]!)}'), onTap: () => showDialog<void>(
-        context: context, builder: (ctx) => AlertDialog(title: LText(name),
-          content: SizedBox(width: 440, child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DishPhoto(asset: p.dishPhotos[name] ?? '', large: true), const SizedBox(height: 12),
-            LText('${p.location} · ¥${money(p.dishPrices[name]!)}\n米饭 ¥${money(p.priceCents)}${p.riceRefill ? '，免费续饭' : ''}'),
-          ])), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const LText('关闭'))]))));
+      title: Text(name), subtitle: LText('{store} · 米饭另计 ¥{price}', params: {'store': p.location, 'price': money(p.priceCents)}),
+      trailing: Text('¥${money(p.dishPrices[name]!)}'), onTap: () async {
+        var count=1;
+        final selected=await showDialog<int>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,refresh)=>AlertDialog(title:Text(name),
+          content:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
+            DishPhoto(asset:p.dishPhotos[name] ?? '',large:true),
+            LText('{store} · 米饭另计 ¥{price}',params:{'store':p.location,'price':money(p.priceCents)}),
+            QuantityPicker(value:count,onChanged:(n)=>refresh(()=>count=n)),
+            Text('${tr(ctx,'合计')} ¥${money(p.dishPrices[name]!*count)}'),
+          ])),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const LText('关闭')),
+            TextButton(onPressed:()=>Navigator.pop(ctx,count),child:const LText('记录这一顿'))])));
+        final store=riceStoreKey(p,storeChoices);
+        if(selected!=null && mounted && store!=null) await recordMeal(FavoriteMeal(storeKey:store,storeName:storeChoices[store]!,kind:'米饭选菜',savedAt:DateTime.now().toIso8601String(),items:[FavoriteItem(riceDishKey(p,name),name,p.dishPrices[name]!,quantity:selected,asset:p.dishPhotos[name] ?? '')]));
+      }));
   }
   Widget catalog() {
     final riceItems = riceCatalog(store: catalogStore);
@@ -480,16 +511,16 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
         onFieldSubmitted: (v) => setState(() => query = v.trim())),
       const SizedBox(height: 8), if (query.isNotEmpty) TextButton(onPressed: () => setState(() => query = ''), child: const LText('清除搜索')),
       const SizedBox(height: 12), categoryFilter(), filterSummary(browsing: true),
-      LText('${visible.length + riceItems.length} 个售卖项', style: const TextStyle(fontSize: 12, color: Color(0xff777972))),
+      LText('${visible.length + riceItems.length} 个菜品', style: const TextStyle(fontSize: 12, color: Color(0xff777972))),
       ])),
       SliverList.builder(itemCount: visible.length, itemBuilder: (context, index) {
         final e = visible[index];
-        return Card(key: ValueKey(e.key), child: ListTile(leading: DishPhoto(asset: dishAssetForEntry(e), data: e.offer.photo), onTap: () => detail(e), title: LText(e.offer.name),
-        subtitle: LText('${e.place.name} ${e.offer.window} · ${e.offer.mealPeriods.map((p)=>periodNames[p]).join("/")} · ${kindNames[e.offer.kind]}${e.offer.channel == 'douyin' ? ' · 抖音团购' : ''}\n${e.db.source == Source.official ? '官方库' : '个人库'}${e.offer.example ? ' · 示例' : ''}${e.offer.available ? '' : ' · 已下架'}'),
+        return Card(key: ValueKey(e.key), child: ListTile(leading: DishPhoto(asset: dishAssetForEntry(e), data: e.offer.photo), onTap: () => detail(e), title: Text(e.offer.name),
+        subtitle: Text('${e.place.name} ${e.offer.window} · ${e.offer.mealPeriods.map((p)=>tr(context, periodNames[p] ?? p)).join("/")} · ${tr(context, kindNames[e.offer.kind]!)}${e.offer.channel == 'douyin' ? ' · ${tr(context, '抖音团购')}' : ''}\n${tr(context, e.db.source == Source.official ? '官方菜单' : '我的菜单')}${e.offer.example ? ' · ${tr(context, '示例')}' : ''}${e.offer.available ? '' : ' · ${tr(context, '已下架')}'}'),
         trailing: LText('¥${money(e.offer.priceCents)}')));
       }),
       SliverList.builder(itemCount: riceItems.length, itemBuilder: (context, index) => riceDishTile(riceItems[index])),
-      if (visible.isEmpty && riceItems.isEmpty) const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: LText('暂无符合条件的菜品。可在“菜单库”录入个人菜单。'))),
+      if (visible.isEmpty && riceItems.isEmpty) const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(20), child: LText('暂无符合条件的菜品。可以在“菜单管理”添加自己的菜单。'))),
     ]);
   }
   Widget stores() {
@@ -502,24 +533,24 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
       .where((o) => o.placeId == selected.$2.id).map((o) => Entry(o, selected.$3)).where(matchesCategory).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       title(selected == null ? '全部店铺' : selected.$2.name,
-        selected == null ? '选择店铺，查看它的菜品、窗口和价格。' : selected.$2.area),
+        selected == null ? '选择店铺，查看它的菜品、窗口和价格。' : selected.$2.area, translate: selected == null),
       scopePicker(), const SizedBox(height: 12),
       if (selected == null) ...[
         FilledButton.icon(onPressed: addStore, icon: const Icon(Icons.add_business), label: const LText('添加个人店铺')),
         LText('${shops.length} 家店铺'),
         for (final shop in shops) Card(child: ListTile(
           key: ValueKey('store-${shop.$1}'), leading: shopPhoto(shop.$1, thumbnail: true),
-          title: LText(shop.$2.name), subtitle: LText('${shop.$2.area}\n${shop.$3.source == Source.official ? '官方库' : '个人库'} · ${shop.$3.offers.where((o) => o.placeId == shop.$2.id).length} 个售卖项'),
+          title: Text(shop.$2.name), subtitle: Text('${shop.$2.area}\n${tr(context, shop.$3.source == Source.official ? '官方菜单' : '我的菜单')} · ${tr(context, '{count} 个菜品', params: {'count': shop.$3.offers.where((o) => o.placeId == shop.$2.id).length})}'),
           trailing: const Icon(Icons.chevron_right), onTap: () => setState(() { selectedStore=shop.$1; query=''; browseCategory='all'; stapleFilter='all'; }))),
-        if (shops.isEmpty) const LText('当前菜单库还没有店铺，可在菜单库中添加个人餐品。'),
+        if (shops.isEmpty) const LText('还没有店铺，先添加一家。'),
       ] else ...[
         TextButton.icon(onPressed: () => setState(() => selectedStore=null), icon: const Icon(Icons.arrow_back), label: const LText('返回全部店铺')),
         shopPhoto(selected.$1),
         if (selected.$3.source == Source.personal) TextButton.icon(onPressed: () => editOffer(null, selected.$2), icon: const Icon(Icons.add), label: const LText('给这家店添加菜品')),
         const SizedBox(height: 12), categoryFilter(), staplePicker(),
-        LText('${dishes.length + riceCatalog(store: selected.$1).length} 个售卖项'),
-        for (final e in dishes) Card(child: ListTile(leading: DishPhoto(asset: dishAssetForEntry(e), data: e.offer.photo), onTap: () => detail(e), title: LText(e.offer.name),
-          subtitle: LText('${e.offer.window} · ${kindNames[e.offer.kind]}${e.offer.channel == 'douyin' ? ' · 抖音团购' : ''}${e.offer.available ? '' : ' · 暂不可选'}'),
+        LText('${dishes.length + riceCatalog(store: selected.$1).length} 个菜品'),
+        for (final e in dishes) Card(child: ListTile(leading: DishPhoto(asset: dishAssetForEntry(e), data: e.offer.photo), onTap: () => detail(e), title: Text(e.offer.name),
+          subtitle: Text('${e.offer.window} · ${tr(context, kindNames[e.offer.kind]!)}${e.offer.channel == 'douyin' ? ' · ${tr(context, '抖音团购')}' : ''}${e.offer.available ? '' : ' · ${tr(context, '已下架')}'}'),
           trailing: LText('¥${money(e.offer.priceCents)}'))),
         for (final item in riceCatalog(store: selected.$1)) riceDishTile(item),
         if (dishes.isEmpty && riceCatalog(store: selected.$1).isEmpty) const LText('这家店暂未录入菜品。'),
@@ -528,26 +559,34 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   }
   Future<void> transfer(Source source, bool importing) async {
     final db = source == Source.official ? repo!.official : repo!.personal;
-    final controller = TextEditingController(text: importing ? '' : db.encode());
+    var diagnostic = false;
+    var exportText = '';
+    if (!importing) {
+      try { exportText = MenuRepository.exportMenu(db); }
+      on FormatException { diagnostic = true; exportText = db.encode(compact: true); }
+    }
+    final controller = TextEditingController(text: exportText);
     String? error;
     MenuDb? parsed;
     final accepted = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, refresh) => AlertDialog(
-      title: LText('${importing ? '导入' : '导出'}${source == Source.official ? '官方' : '个人'}库'),
+      title: LText(importing ? '导入{menu}' : diagnostic ? '导出排障数据' : '导出{menu}', params: {'menu': tr(context, source == Source.official ? '官方菜单' : '我的菜单')}),
       content: SizedBox(width: 600, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        LText(importing ? '粘贴 JSON 数据包。先校验，再确认替换这个库；另一个库不受影响。建议先导出备份。' : '复制 JSON 保存为 UTF-8 文件，之后可在另一台设备导入。'),
-        if (source == Source.official && importing) const LText('原型仅支持手动数据包；“官方”是库类型标记，尚无服务器签名认证。'),
+        LText(importing ? '粘贴菜单文件的内容，检查后再确认替换。' : diagnostic ? '这份旧菜单超过容量上限。以下内容仅供排障，不能直接导入恢复，请私下保存。' : '复制菜单内容并保存为文件，就能在其他设备上导入。'),
         const SizedBox(height: 12), TextField(controller: controller, readOnly: !importing, minLines: 6, maxLines: 12,
-          onChanged: (_) => refresh(() { parsed = null; error = null; }), decoration: InputDecoration(labelText: tr(context, 'JSON 数据包'))),
+          onChanged: (_) => refresh(() { parsed = null; error = null; }), decoration: InputDecoration(labelText: tr(context, '菜单文件内容'))),
         if (error != null) LText(error!, style: const TextStyle(color: Colors.red)),
-        if (parsed != null) LText('校验通过：版本 ${parsed!.revision} · ${parsed!.places.length} 家店 · ${parsed!.offers.length} 个售卖项'),
+        if (parsed != null) LText('已读取：{stores} 家店 · {items} 个菜品', params: {'stores': parsed!.places.length, 'items': parsed!.offers.length}),
       ]))), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LText('关闭')),
-        if (!importing) FilledButton(onPressed: () async { await Clipboard.setData(ClipboardData(text: controller.text)); notify('已复制，请保存备份'); }, child: const LText('复制数据')),
+        if (!importing) FilledButton(onPressed: () async { try { await Clipboard.setData(ClipboardData(text: controller.text)); notify(diagnostic ? '排障数据已复制，请私下保存。' : '已复制，请保存备份'); } catch (_) { notify('复制失败，请重试。'); } }, child: const LText('复制菜单内容')),
         if (importing) TextButton(onPressed: () { try {
           final data = MenuDb.decode(controller.text, source);
-          if (source == Source.official && data.revision <= db.revision) throw const FormatException('官方更新版本必须高于当前版本');
+          if (source == Source.official && data.revision <= db.revision) {
+            refresh(() { parsed = null; error = '这份菜单不是新版，请选择更新的菜单文件。'; });
+            return;
+          }
           refresh(() { parsed = data; error = null; });
-        } catch (e) { refresh(() { parsed = null; error = '校验失败：$e'; }); } }, child: const LText('校验数据')),
-        if (importing) FilledButton(onPressed: parsed == null ? null : () => Navigator.pop(ctx, true), child: const LText('确认替换此库')),
+        } catch (e) { refresh(() { parsed = null; error = '文件读不出来，请换一份菜单文件再试。'; }); } }, child: const LText('检查菜单')),
+        if (importing) FilledButton(onPressed: parsed == null ? null : () => Navigator.pop(ctx, true), child: const LText('确认替换菜单')),
       ])));
     // Controllers remain alive until the closing dialog animation has finished.
     Future<void>.delayed(const Duration(seconds: 1), controller.dispose);
@@ -558,9 +597,9 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     final place = old == null ? preselected : db.places.firstWhere((p) => p.id == old.placeId);
     final name = TextEditingController(text: old?.name ?? '');
     final shop = TextEditingController(text: place?.name ?? '');
-    final area = TextEditingController(text: place?.area ?? '中北大学周边');
+    final area = TextEditingController(text: place?.area ?? tr(context, '中北大学周边'));
     final price = TextEditingController(text: old == null ? '' : money(old.priceCents));
-    final portion = TextEditingController(text: old?.portion ?? '1 份');
+    final portion = TextEditingController(text: old?.portion ?? tr(context, '1 份'));
     final window = TextEditingController(text: old?.window ?? '');
     final notes = TextEditingController(text: old?.notes ?? '');
     String photo = old?.photo ?? '';
@@ -576,14 +615,14 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
         Wrap(spacing: 12, children: [TextButton.icon(onPressed: picking ? null : () async {
           refresh(() => picking=true);
           try { final picked = await pickDishPhoto(); if (ctx.mounted && picked != null) refresh(() => photo=picked); }
-          catch (e) { if (ctx.mounted) refresh(() => error=e.toString()); }
+          catch (e) { if (ctx.mounted) refresh(() => error=e is FormatException && e.message == '照片过大，请选择小于300KB的图片' ? e.message : '照片读取失败，请换一张再试。'); }
           finally { if (ctx.mounted) refresh(() => picking=false); }
         }, icon: const Icon(Icons.photo_library_outlined), label: LText(photo.isEmpty ? '添加照片' : '更换照片')),
         if (photo.isNotEmpty) TextButton(onPressed: () => refresh(() => photo=''), child: const LText('移除照片'))]),
         const SizedBox(height: 20),
         for (final field in [(name, '菜名'), (shop, '店铺名称'), (area, '位置 / 区域'), (price, '售价（元）'), (portion, '份量'), (window, '窗口（可留空）'), (notes, '购买规则 / 说明')])
           Padding(padding: const EdgeInsets.only(bottom: 20), child: TextField(controller: field.$1, decoration: InputDecoration(labelText: tr(context, field.$2)))),
-        DropdownButtonFormField<String>(initialValue: kind, decoration: InputDecoration(labelText: tr(context, '售卖类型')),
+        DropdownButtonFormField<String>(initialValue: kind, decoration: InputDecoration(labelText: tr(context, '菜品类型')),
           items: kindNames.entries.map((e) => DropdownMenuItem(value: e.key, child: LText(e.value))).toList(),
           onChanged: (v) => refresh(() { kind = v!; addon = false; alcohol = false; })),
         const SizedBox(height: 20),
@@ -591,11 +630,11 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
           items: stapleNames.entries.map((e) => DropdownMenuItem(value: e.key, child: LText(e.value))).toList(),
           onChanged: (v) => refresh(() => staple=v!)),
         const SizedBox(height: 20),
-        DropdownButtonFormField<String>(initialValue: channel, decoration: InputDecoration(labelText: tr(context, '价格渠道')),
+        DropdownButtonFormField<String>(initialValue: channel, decoration: InputDecoration(labelText: tr(context, '价格来源')),
           items: const [DropdownMenuItem(value: 'regular', child: LText('直接购买')), DropdownMenuItem(value: 'douyin', child: LText('抖音团购'))],
           onChanged: (v) => refresh(() => channel = v!)),
         const SizedBox(height: 16),
-        if (kind == 'drink') CheckboxListTile(title: const LText('酒精饮品（不自动推荐）'), value: alcohol, onChanged: (v) => refresh(() => alcohol = v!)),
+        if (kind == 'drink') CheckboxListTile(title: const LText('酒精饮品（不参与推荐）'), value: alcohol, onChanged: (v) => refresh(() => alcohol = v!)),
         CheckboxListTile(title: const LText('在售'), value: available, onChanged: (v) => refresh(() => available = v!)),
         if (error != null) LText(error!, style: const TextStyle(color: Colors.red)),
       ]))))), bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.all(16), child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LText('取消')),
@@ -638,7 +677,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
         TextButton(onPressed: picking ? null : () async {
           refresh(() => picking=true);
           try { final result=await pickDishPhoto(); if (ctx.mounted && result != null) refresh(() => photo=result); }
-          catch (e) { if (ctx.mounted) refresh(() => error=e.toString()); }
+          catch (e) { if (ctx.mounted) refresh(() => error=e is FormatException && e.message == '照片过大，请选择小于300KB的图片' ? e.message : '照片读取失败，请换一张再试。'); }
           finally { if (ctx.mounted) refresh(() => picking=false); }
         }, child: const LText('添加照片')),
         const SizedBox(height: 20), TextField(controller: name, decoration: InputDecoration(labelText: tr(context,'店铺名称'))),
@@ -652,7 +691,7 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
     if (accepted == true && mounted) {
       final db=repo!.personal;
       if (db.places.any((p) => p.name == name.text.trim() && p.area == area.text.trim())) {
-        notify('同名同位置的店铺已存在');
+        notify('已经有一家同名同位置的店铺');
       } else {
         final place=Place('p${DateTime.now().microsecondsSinceEpoch}',name.text.trim(),area.text.trim(),photo:photo);
         final ok=await save(MenuDb(source: db.source,revision: db.revision+1,places:[...db.places,place],foods:db.foods,offers:db.offers,ricePlans:db.ricePlans));
@@ -663,33 +702,33 @@ class _CampusHomeState extends State<CampusHome> with WidgetsBindingObserver {
   }
   Future<void> deleteOffer(Offer offer) async {
     final accepted = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: const LText('删除个人菜品？'),
-      content: LText('将删除“${offer.name}”，官方库不受影响。'), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LText('取消')),
+      content: LText('删除“{dish}”？', params: {'dish': offer.name}), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const LText('取消')),
         FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const LText('删除'))]));
     if (accepted != true || !mounted) return;
     final db = repo!.personal;
     await save(MenuDb(source: db.source, revision: db.revision + 1, places: db.places, foods: db.foods, ricePlans: db.ricePlans, offers: db.offers.where((o) => o.id != offer.id).toList()));
   }
   Widget libraries() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    OutlinedButton.icon(onPressed: manageOfficial, icon: const Icon(Icons.download), label: const LText('管理官方店铺')),
-    title('你的菜单，你做主', '官方库和个人库独立保存，可单独使用，也可合并推荐。'),
+    OutlinedButton.icon(onPressed: manageOfficial, icon: const Icon(Icons.download), label: const LText('官方菜单')),
+    title('你的菜单，你做主', '可以用官方菜单选餐，也可以加上自己常吃的菜。'),
     for (final db in [repo!.official, repo!.personal]) Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      LText(db.source == Source.official ? '官方菜单库' : '我的个人库', style: Theme.of(context).textTheme.titleLarge),
-      LText('版本 ${db.revision} · ${db.places.length} 家店 · ${db.offers.length} 个售卖项'),
-      const SizedBox(height: 10), LText(db.source == Source.official ? '内置照片菜单；可导入团队维护的更高版本数据包。' : '仅存于本机，支持录入、修改、下架及备份迁移。'),
+      LText(db.source == Source.official ? '官方菜单' : '我的菜单', style: Theme.of(context).textTheme.titleLarge),
+      LText('{stores} 家店 · {items} 个菜品', params: {'stores': db.places.length, 'items': db.offers.length}),
+      const SizedBox(height: 10), LText(db.source == Source.official ? '可以导入新版菜单文件。' : '保存在本机，可随时修改。'),
       Wrap(spacing: 8, children: [TextButton(onPressed: busy ? null : () => transfer(db.source, false), child: const LText('导出备份')),
-        TextButton(onPressed: busy ? null : () => transfer(db.source, true), child: LText(db.source == Source.official ? '导入更新' : '导入个人库'))]),
+        TextButton(onPressed: busy ? null : () => transfer(db.source, true), child: LText(db.source == Source.official ? '导入更新' : '导入我的菜单'))]),
     ]))),
     const SizedBox(height: 12), OutlinedButton.icon(onPressed: busy ? null : addStore, icon: const Icon(Icons.add_business), label: const LText('添加个人店铺')),
     const SizedBox(height: 12), FilledButton.icon(onPressed: busy ? null : () => editOffer(), icon: const Icon(Icons.add), label: const LText('添加个人菜品')),
     const SizedBox(height: 12),
-    for (final o in repo!.personal.offers) Card(child: ListTile(leading: DishPhoto(data: o.photo), title: LText(o.name), subtitle: LText('¥${money(o.priceCents)} · ${o.available ? '在售' : '已下架'}'),
-      onTap: busy ? null : () => editOffer(o), trailing: IconButton(tooltip: '删除个人菜品', onPressed: busy ? null : () => deleteOffer(o), icon: const Icon(Icons.delete_outline)))),
-    const SizedBox(height: 12), const LText('跨库同名店铺暂按不同来源处理，不自动合并身份。官方更新不会覆盖个人数据。当前不含云同步、实时价格或商家营业验证。'),
+    for (final o in repo!.personal.offers) Card(child: ListTile(leading: DishPhoto(data: o.photo), title: Text(o.name), subtitle: Text('¥${money(o.priceCents)} · ${tr(context, o.available ? '在售' : '已下架')}'),
+      onTap: busy ? null : () => editOffer(o), trailing: IconButton(tooltip: tr(context, '删除个人菜品'), onPressed: busy ? null : () => deleteOffer(o), icon: const Icon(Icons.delete_outline)))),
+    const SizedBox(height: 12), const LText('官方菜单和我的菜单分开保存，互不覆盖。'),
   ]);
   @override
   Widget build(BuildContext context) {
     if (repo == null) return Scaffold(body: Center(child: loadError == null ? const CircularProgressIndicator() :
-      Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [LText(loadError!), TextButton(onPressed: load, child: const LText('重试')), TextButton(onPressed: exportRecovery, child: const Text('导出原始数据'))]))));
+      Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [LText(loadError!), TextButton(onPressed: load, child: const LText('重试')), TextButton(onPressed: exportRecovery, child: const LText('导出备份（排障用）'))]))));
     final wide = MediaQuery.sizeOf(context).width >= 850;
     final page = tab == 1
       ? Center(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 914),

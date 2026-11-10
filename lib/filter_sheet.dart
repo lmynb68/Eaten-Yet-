@@ -22,7 +22,7 @@ Future<BrowseFilters?> showBrowseFilters(BuildContext context, {
   return showModalBottomSheet<BrowseFilters>(context: context, isScrollControlled: true,
     showDragHandle: true, useSafeArea: true, backgroundColor: Colors.white,
     builder: (sheetContext) => StatefulBuilder(builder: (context, refresh) {
-      Widget options(Map<String, String> values, String selected, ValueChanged<String> change) =>
+      Widget options(Map<String, String> values, String selected, ValueChanged<String> change, {bool translate = true}) =>
         LayoutBuilder(builder: (context, constraints) => Wrap(spacing: 8, runSpacing: 8,
           children: [for (final entry in values.entries) SizedBox(
             width: (constraints.maxWidth - 8) / 2,
@@ -32,7 +32,7 @@ Future<BrowseFilters?> showBrowseFilters(BuildContext context, {
                 backgroundColor: selected == entry.key ? const Color(0xfff7eee8) : const Color(0xfff5f6f3),
                 foregroundColor: selected == entry.key ? const Color(0xff914f35) : const Color(0xff45483f),
                 side: BorderSide(color: selected == entry.key ? const Color(0xffd8b59f) : Colors.transparent)),
-              onPressed: () => refresh(() => change(entry.key)), child: Text(tr(context, entry.value), textAlign: TextAlign.center)),
+              onPressed: () => refresh(() => change(entry.key)), child: Text(translate || entry.key.isEmpty ? tr(context, entry.value) : entry.value, textAlign: TextAlign.center)),
           )]));
       final visibleStores = Map<String, String>.fromEntries(stores.entries.where((e) =>
         draftScope == Scope.merged || e.key.startsWith(draftScope == Scope.official ? 'official:' : 'personal:')));
@@ -44,13 +44,13 @@ Future<BrowseFilters?> showBrowseFilters(BuildContext context, {
           Flexible(child: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             const SizedBox(height: 14),
             const LText('店铺', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 10),
-            options({'': '全部店铺', ...visibleStores}, draftStore ?? '', (v) => draftStore = v.isEmpty ? null : v),
+            options({'': '全部店铺', ...visibleStores}, draftStore ?? '', (v) => draftStore = v.isEmpty ? null : v, translate: false),
             if (!riceOnly) ...[
             const SizedBox(height: 22), const LText('主食分类', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 10),
             options({'all': '全部主食', ...stapleNames}, draftStaple, (v) => draftStaple = v),
             ],
-            const SizedBox(height: 22), const LText('菜单来源', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 10),
-            options({'merged': '官方库 + 个人库', 'official': '仅官方库', 'personal': '仅个人库'}, draftScope.name, (v) {
+            const SizedBox(height: 22), const LText('菜单范围', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 10),
+            options({'merged': '全部菜单', 'official': '官方菜单', 'personal': '我的菜单'}, draftScope.name, (v) {
               draftScope = Scope.values.byName(v);
               if (draftStore != null && draftScope != Scope.merged && !draftStore!.startsWith('${draftScope.name}:')) draftStore = null;
             }),

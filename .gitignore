@@ -29,3 +29,7 @@ assets/stores/wenying.jpg
 assets/stores/shiyue.jpg
 
 browser-qa-result.json
+
+# Local Python cache and build inspection output.
+__pycache__/
+*.pyc

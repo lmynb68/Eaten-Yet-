@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'language.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,19 +54,19 @@ class _MealChoiceState extends State<_MealChoice> {
   bool saving=false;
   String? error;
   @override Widget build(BuildContext context)=>AlertDialog(
-    title:Text(widget.first?'选择餐次方式':'餐次设置'),
+    title:LText(widget.first?'选择用餐时间':'用餐时间'),
     content:SizedBox(width:420,child:SingleChildScrollView(child:Column(mainAxisSize:MainAxisSize.min,children:[
-      const Text('跟随系统使用设备本地时间，按下方自定义时段切换餐次。'),
+      const LText('按手机时间自动切换。'),
       const SizedBox(height:12),
       for(final item in {'auto':'跟随系统时间',...periodNames}.entries) ListTile(
-        key:ValueKey('meal-choice-${item.key}'),title:Text(item.value),
+        key:ValueKey('meal-choice-${item.key}'),title:LText(item.value),
         leading:Icon(choice==item.key?Icons.radio_button_checked:Icons.radio_button_unchecked),
         onTap:saving?null:()=>setState(()=>choice=item.key)),
-      const Text('保存后可在设置中修改。'),
+      const LText('保存后可在设置中修改。'),
       const SizedBox(height:16),
-      const Text('自动模式时段（开始时间）'),
+      const LText('各餐开始时间'),
       for(var i=0;i<3;i++) ListTile(
-        key:ValueKey('meal-time-$i'),title:Text('${periodNames.values.elementAt(i)}开始'),
+        key:ValueKey('meal-time-$i'),title:LText('{meal}开始', params: {'meal': tr(context, periodNames.values.elementAt(i))}),
         trailing:Text(schedule.label(schedule.starts[i])),
         onTap:saving?null:() async {
           final selected=await showTimePicker(context:context,
@@ -76,19 +77,19 @@ class _MealChoiceState extends State<_MealChoice> {
             schedule=MealSchedule(breakfast:values[0],lunch:values[1],dinner:values[2]);error=null;
           });
         }),
-      Text('早餐 ${schedule.label(schedule.breakfast)}—${schedule.label(schedule.lunch)}\n午餐 ${schedule.label(schedule.lunch)}—${schedule.label(schedule.dinner)}\n晚餐 ${schedule.label(schedule.dinner)}—次日${schedule.label(schedule.breakfast)}'),
-      if(!schedule.valid) const Text('请按早餐、午餐、晚餐的先后顺序设置，开始时间不能相同。',style:TextStyle(color:Colors.red)),
-      TextButton(onPressed:saving?null:()=>setState(() {schedule=const MealSchedule();error=null;}),child:const Text('恢复默认时段')),
+      LText('早餐 {breakfast}—{lunch}\n午餐 {lunch}—{dinner}\n晚餐 {dinner}—次日{breakfast}', params: {'breakfast': schedule.label(schedule.breakfast), 'lunch': schedule.label(schedule.lunch), 'dinner': schedule.label(schedule.dinner)}),
+      if(!schedule.valid) const LText('请按早餐、午餐、晚餐的先后顺序设置，开始时间不能相同。',style:TextStyle(color:Colors.red)),
+      TextButton(onPressed:saving?null:()=>setState(() {schedule=const MealSchedule();error=null;}),child:const LText('恢复默认时段')),
 
-      if(error!=null) Text(error!,style:const TextStyle(color:Colors.red)),
+      if(error!=null) LText(error!,style:const TextStyle(color:Colors.red)),
     ]))),actions:[
-      if(!widget.first) TextButton(onPressed:saving?null:()=>Navigator.pop(context),child:const Text('取消')),
+      if(!widget.first) TextButton(onPressed:saving?null:()=>Navigator.pop(context),child:const LText('取消')),
       FilledButton(onPressed:saving || !schedule.valid?null:() async {
         setState(()=>saving=true);
         try {
           await saveMealConfig(widget.prefs,choice,schedule);
           if(context.mounted) Navigator.pop(context,choice);
         } catch(_) {if(mounted)setState(() {saving=false;error='保存失败，请重试';});}
-      },child:Text(saving?'保存中…':'保存')),
+      },child:LText(saving?'保存中…':'保存')),
     ]);
 }

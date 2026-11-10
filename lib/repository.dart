@@ -13,6 +13,7 @@ const shippedMenuDigests = <int, String>{
   6: '7aca739bf820a8cfc750abf86a4066f55d54e477a8c1cca2c05bc6c4c98f0b20',
   7: 'c32916677daa54ca5278cd9e893a36b81419c470fb5356f1615efd01005227ae',
   8: '5c564a4e74fab5fb01d77f876f176e615efa2551a09c0b561052fe2eeaf988a2',
+  10: '24d6abe11df787c0b3db4271d9ea1b97fd9af2183978ae23b01675502786332c',
   9: 'fccc4a3dfdfc507681c07da9ed3eb07ce68328ee2114ef166d1f3f46ee5e578c',
 };
 
@@ -80,7 +81,7 @@ class MenuRepository {
     if (text.length > MenuDb.maxJsonLength) return MenuDb.fromStoredJson(text, source);
     return MenuDb.decode(text, source);
   }
-  static String _encodeForStorage(MenuDb menu) {
+  static String exportMenu(MenuDb menu) {
     final text = menu.encode(compact: true);
     if (text.length > MenuDb.maxJsonLength) {
       throw const FormatException('菜单保存后超过容量上限，请减少内容后重试');
@@ -89,7 +90,7 @@ class MenuRepository {
   }
   Future<void> _commit(MenuDb nextOfficial, MenuDb nextPersonal, Set<String> installed) async {
     final ok = await preferences.setString(storageKey, jsonEncode({
-      'official': _encodeForStorage(nextOfficial), 'personal': _encodeForStorage(nextPersonal),
+      'official': exportMenu(nextOfficial), 'personal': exportMenu(nextPersonal),
       'installedStores': installed.toList()..sort(),
     }));
     if (!ok) throw StateError('保存失败，原数据库保持不变');

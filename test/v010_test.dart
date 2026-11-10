@@ -46,7 +46,7 @@ void main() {
       'official':old.encode(),'personal':MenuDb.empty(Source.personal).encode(),
     })});
     final r=await MenuRepository.load();
-    expect(r.official.revision,9);
+    expect(r.official.revision,10);
     expect(r.activeOfficial.places.map((p)=>p.id),contains('community'));
   });
   test('store photo and explicit staple survive export',() {

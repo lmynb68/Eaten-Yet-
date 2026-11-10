@@ -10,25 +10,37 @@ String riceDishKey(RicePlan plan, String name) => jsonEncode(['rice', plan.store
 
 class FavoriteItem {
   final String key, name, asset, photo;
-  final int price;
-  const FavoriteItem(this.key, this.name, this.price, {this.asset = '', this.photo = ''});
-  factory FavoriteItem.entry(Entry e) => FavoriteItem(e.key, e.offer.name, e.offer.priceCents, asset: dishAssetForEntry(e), photo: e.offer.photo);
-  Map<String, dynamic> toJson() => {'key': key, 'name': name, 'price': price, 'asset': asset, 'photo': photo};
-  factory FavoriteItem.fromJson(Map<String, dynamic> j) => FavoriteItem(j['key'], j['name'], j['price'], asset: j['asset'] ?? '', photo: j['photo'] ?? '');
+  final int price, quantity;
+  const FavoriteItem(this.key, this.name, this.price, {this.asset = '', this.photo = '', this.quantity = 1});
+  factory FavoriteItem.entry(Entry e, {int quantity = 1}) => FavoriteItem(e.key, e.offer.name, e.offer.priceCents, asset: dishAssetForEntry(e), photo: e.offer.photo, quantity: quantity);
+  Map<String, dynamic> toJson() => {'key': key, 'name': name, 'price': price, 'asset': asset, 'photo': photo, 'quantity': quantity};
+  factory FavoriteItem.fromJson(Map<String, dynamic> j) {
+    final quantity = j['quantity'] ?? 1;
+    if (quantity is! int || quantity < 1 || quantity > 99) throw const FormatException('份数无效');
+    return FavoriteItem(j['key'], j['name'], j['price'], asset: j['asset'] ?? '', photo: j['photo'] ?? '', quantity: quantity);
+  }
+}
+
+int _baseQuantity(Map<String, dynamic> j) {
+  final n = j['baseQuantity'] ?? 1;
+  if (n is! int || n < 1 || n > 99) throw const FormatException('份数无效');
+  return n;
 }
 
 class FavoriteMeal {
   final String storeKey, storeName, kind, savedAt, baseLabel;
   final List<FavoriteItem> items;
-  final int ricePrice;
+  final int ricePrice, baseQuantity;
   const FavoriteMeal({required this.storeKey, required this.storeName, required this.kind,
-    required this.savedAt, required this.items, this.ricePrice = 0, this.baseLabel = '米饭'});
-  String get id => jsonEncode([storeKey, kind, items.map((i) => i.key).toList()..sort()]);
-  int get total => ricePrice + items.fold<int>(0, (sum, item) => sum + item.price);
+    required this.savedAt, required this.items, this.ricePrice = 0, this.baseLabel = '米饭', this.baseQuantity = 1});
+  String get id => jsonEncode([storeKey, kind, items.map((i) => i.key).toList()..sort(),
+    if (baseQuantity != 1 || items.any((i) => i.quantity != 1))
+      [baseQuantity, items.map((i) => jsonEncode([i.key, i.quantity])).toList()..sort()]]);
+  int get total => ricePrice * baseQuantity + items.fold<int>(0, (sum, item) => sum + item.price * item.quantity);
   Map<String, dynamic> toJson() => {'storeKey': storeKey, 'storeName': storeName, 'kind': kind,
-    'savedAt': savedAt, 'items': items.map((i) => i.toJson()).toList(), 'ricePrice': ricePrice, 'baseLabel': baseLabel};
+    'savedAt': savedAt, 'items': items.map((i) => i.toJson()).toList(), 'ricePrice': ricePrice, 'baseLabel': baseLabel, 'baseQuantity': baseQuantity};
   factory FavoriteMeal.fromJson(Map<String, dynamic> j) => FavoriteMeal(storeKey: j['storeKey'],
-    storeName: j['storeName'], kind: j['kind'], savedAt: j['savedAt'], ricePrice: j['ricePrice'] ?? 0, baseLabel: j['baseLabel'] ?? '米饭',
+    storeName: j['storeName'], kind: j['kind'], savedAt: j['savedAt'], ricePrice: j['ricePrice'] ?? 0, baseLabel: j['baseLabel'] ?? '米饭', baseQuantity: _baseQuantity(j),
     items: (j['items'] as List).map((i) => FavoriteItem.fromJson(Map<String, dynamic>.from(i))).toList());
 }
 
@@ -73,7 +85,7 @@ class FavoriteStore {
   }
   Future<void> _update(List<FavoriteMeal> Function() nextMeals, bool Function() nextEnabled, {bool enforceLimits = false}) {
     final task = _pending.then((_) async {
-      if (recoveryRequired) throw StateError('收藏数据需要恢复，请先导出原始数据；未覆盖原记录');
+      if (recoveryRequired) throw StateError('收藏数据需要恢复，请先导出备份（排障用）；未覆盖原记录');
       final next = nextMeals(), flag = nextEnabled();
       if (enforceLimits && next.length > maxMeals && next.length > meals.length) {
         throw const FormatException('最多保存500条收藏，请先删除部分记录');
@@ -123,6 +135,7 @@ class FavoriteStore {
     _pending = task.catchError((Object _) {});
     return task;
   }
+  Map<String, dynamic> get scoringSnapshot => {'enabled': enabled, 'dishes': Map<String,int>.from(_dishCounts), 'pairs': Map<String,int>.from(_pairCounts)};
   double dishWeight(String key) => !enabled ? 1 : 1 + min(2.0, (_dishCounts[key] ?? 0) * .25);
   double pairCoefficient(String a, String b) => !enabled ? 1 : 1 + min(1.0, (_pairCounts[_pairKey(a, b)] ?? 0) * .15);
   double score(Iterable<String> input) {

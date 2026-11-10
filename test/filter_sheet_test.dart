@@ -24,7 +24,7 @@ void main() {
     await tap('食味坊');
     await tester.tap(find.byTooltip('关闭')); await tester.pumpAndSettle();
     expect(result, isNull);
-    await tap('打开'); await tap('食味坊'); await tap('仅个人库');
+    await tap('打开'); await tap('食味坊'); await tap('我的菜单');
     expect(find.text('食味坊'), findsNothing);
     await tap('应用筛选');
     expect(result!.scope, Scope.personal); expect(result!.store, isNull);

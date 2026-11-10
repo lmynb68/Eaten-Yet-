@@ -35,8 +35,12 @@ class RicePlan {
   final Map<String, String> dishTypes;
   final bool riceRefill;
   bool get pricedByDish => dishPrices.isNotEmpty;
-  int totalPrice(Iterable<String?> dishes) => priceCents + (pricedByDish
-    ? dishes.whereType<String>().fold<int>(0, (sum, name) => sum + dishPrices[name]!) : 0);
+  int totalPrice(Iterable<String?> dishes, {List<int>? quantities, int baseQuantity = 1}) {
+    final rows = dishes.toList();
+    final counts = quantities ?? List.filled(rows.length, 1);
+    if (baseQuantity < 1 || baseQuantity > 99 || counts.length != rows.length || counts.any((n) => n < 1 || n > 99)) throw ArgumentError('Invalid quantity');
+    return priceCents * baseQuantity + (pricedByDish ? List.generate(rows.length, (i) => rows[i] == null ? 0 : dishPrices[rows[i]]! * counts[i]).fold<int>(0, (a,b) => a+b) : 0);
+  }
   final List<String> labels;
   final List<List<String>> options;
   const RicePlan({required this.id, required this.name, required this.location,
@@ -66,7 +70,7 @@ class RicePlan {
         priceCents <= 0 || priceCents > 10000000 || labels.length != 3 ||
         labels.any((v) => v.trim().isEmpty) || options.length != 3 ||
         options.any((v) => v.length > 100 || v.any((n) => n.trim().isEmpty) || v.toSet().length != v.length)) {
-      throw const FormatException('米饭套餐需有名称、位置、有效总价和三个菜位，每位最多100个不重复菜名');
+      throw const FormatException('米饭套餐需有名称、位置、有效总价和三组菜品，每组最多100个不重复菜名');
     }
   }
 }
@@ -78,32 +82,40 @@ class RiceResult {
 }
 
 RiceResult randomRice(RicePlan plan, int budget, List<String?> previous,
-    Set<int> locked, Random random, {int? meatCount, int limit = 100000, double Function(List<String>)? score}) {
+    Set<int> locked, Random random, {bool freeSelection = false, int? meatCount, List<int>? quantities, int baseQuantity = 1, int limit = 12000, double Function(List<String>)? score}) {
   plan.validate();
   if (meatCount != null && (meatCount < 0 || meatCount > 2)) return const RiceResult(null, '请选择3素、2素1荤或1素2荤；3荤请手选');
   if (budget < plan.priceCents) return const RiceResult(null, '套餐总价超出预算，原选择保留');
-  if (previous.length != 3 || locked.any((i) => i < 0 || i > 2)) {
-    return const RiceResult(null, '菜位参数无效');
+  final length = previous.length;
+  final free = plan.pricedByDish && freeSelection;
+  final options = free ? List.generate(length, (_) => plan.options.expand((r) => r).toSet().toList()) : plan.options;
+  if (length < 1 || length > 20 || (!free && length != 3) || locked.any((i) => i < 0 || i >= length)) {
+    return const RiceResult(null, '请重新选择菜品');
   }
   if (plan.options.any((v) => v.isEmpty)) return const RiceResult(null, '可选成品菜尚未补齐，请先维护套餐菜名');
   for (final i in locked) {
-    if (!plan.options[i].contains(previous[i])) return const RiceResult(null, '锁定菜已不在这个菜位的菜单中，请先解锁');
+    if (!options[i].contains(previous[i])) return const RiceResult(null, '锁定的菜已不在菜单里，请先解锁');
   }
-  if (locked.length == 3) return const RiceResult(null, '三个菜位都已锁定，请先解锁');
-  final chosen = List<String?>.filled(3, null);
+  if (locked.length == length) return const RiceResult(null, '菜品都已锁定，请先解锁一道菜');
+  final chosen = List<String?>.filled(length, null);
   List<String?>? result;
   int visited = 0, count = 0;
   double totalWeight = 0;
   bool limited = false;
   final old = previous.whereType<String>().toSet();
-  final choices = plan.options.map((v) => [...v]..shuffle(random)).toList();
-  void visit(int slot) {
+  final choices = options.map((v) => [...v]..shuffle(random)).toList();
+  final counts = quantities ?? List.filled(length, 1);
+  plan.totalPrice(chosen, quantities: counts, baseQuantity: baseQuantity);
+  final used = <String>{};
+  int evaluated = 0;
+  void visit(int slot, int cost) {
     if (++visited > limit) { limited = true; return; }
-    if (plan.totalPrice(chosen) > budget) return;
-    if (slot == 3) {
+    if (cost > budget) return;
+    if (slot == length) {
       if (meatCount != null && (chosen.any((n) => riceDishType(plan, n!) == null) ||
           chosen.where((n) => riceDishType(plan, n!) == 'meat').length != meatCount)) return;
-      if (old.length == 3 && old.containsAll(chosen)) return;
+      if (old.length == length && old.containsAll(chosen)) return;
+      if (++evaluated >= 256) limited = true;
       if (score == null) {
         if (random.nextInt(++count) == 0) result = [...chosen];
       } else {
@@ -116,14 +128,15 @@ RiceResult randomRice(RicePlan plan, int budget, List<String?> previous,
     }
     for (final name in locked.contains(slot) ? [previous[slot]!] : choices[slot]) {
       if (limited) break;
-      if (chosen.take(slot).contains(name)) continue;
+      if (!used.add(name)) continue;
       chosen[slot] = name;
-      visit(slot + 1);
+      visit(slot + 1, cost + (plan.pricedByDish ? plan.dishPrices[name]! * counts[slot] : 0));
+      used.remove(name);
       chosen[slot] = null;
     }
   }
-  visit(0);
+  visit(0, plan.priceCents * baseQuantity);
   return RiceResult(result, result != null
-    ? '${plan.pricedByDish ? '菜价合计加米饭，锁定菜位保持不变。' : '按套餐总价计费，锁定菜位保持不变。'}${limited ? '搜索达到上限，返回已找到的组合。' : ''}'
-    : limited ? '搜索达到上限，暂未找到新组合；原选择保留' : '没有符合预算和锁定条件的新组合；原选择保留');
+    ? '已选好，锁定的菜保持不变。'
+    : '暂无其他合适搭配，已保留当前选择。');
 }

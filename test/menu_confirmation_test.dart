@@ -11,7 +11,7 @@ void main() {
   final personal=MenuDb.empty(Source.personal);
   SharedPreferences.setMockInitialValues({MenuRepository.storageKey:jsonEncode({'official':old.encode(),'personal':personal.encode(),'installedStores':['sf']})});
   final repo=await MenuRepository.load();
-  expect(repo.official.revision,9);
+  expect(repo.official.revision,10);
   expect(repo.personal.encode(),personal.encode());
   expect(repo.installedStoreIds,{'sf'});
  });

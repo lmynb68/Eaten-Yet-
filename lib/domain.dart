@@ -110,7 +110,7 @@ class MenuDb {
     for (final plan in ricePlans) { plan.validate(); }
     ids(places.map((e) => e.id).toList()); ids(foods.map((e) => e.id).toList()); ids(offers.map((e) => e.id).toList());
     if (revision < 1 || offers.length > 2000 || places.length > 200 || foods.length > 2000) {
-      throw const FormatException('版本无效或超过菜单容量（2000 个售卖项）');
+      throw const FormatException('版本无效或超过菜单容量（2000 个菜品）');
     }
     if (places.any((p) => p.name.trim().isEmpty) || foods.any((f) => f.name.trim().isEmpty)) {
       throw const FormatException('店铺或食材名称为空');

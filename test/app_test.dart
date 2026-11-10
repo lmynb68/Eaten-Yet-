@@ -43,7 +43,7 @@ void main() {
     expect(find.text('已为你选好一份。'), findsOneWidget);
     await tester.tap(find.text('我的喜爱'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('收藏数据无法解析'), findsOneWidget);
+    expect(find.textContaining('收藏读取失败'), findsOneWidget);
     expect((await SharedPreferences.getInstance()).getString(FavoriteStore.storageKey), damaged);
     expect(tester.takeException(), isNull);
   });
@@ -51,12 +51,12 @@ void main() {
     tester.view.physicalSize = const Size(390, 844); tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize); addTearDown(tester.view.resetDevicePixelRatio);
     await startApp(tester);
-    await tester.tap(find.text('菜单库')); await tester.pumpAndSettle();
+    await tester.tap(find.text('菜单管理')); await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('添加个人菜品'));
     await tester.tap(find.text('添加个人菜品')); await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('添加照片'), findsOneWidget);
-    await tester.ensureVisible(find.text('价格渠道'));
+    await tester.ensureVisible(find.text('价格来源'));
     final type = tester.getRect(find.byType(DropdownButtonFormField<String>).first);
     final channel = tester.getRect(find.byType(DropdownButtonFormField<String>).last);
     expect(channel.top - type.bottom, greaterThanOrEqualTo(16));
@@ -75,39 +75,39 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('meal-category-side'))); await tester.pumpAndSettle();
     expect(find.textContaining('当前主菜：'), findsOneWidget);
     expect(find.text('自己选小食'), findsNothing);
-    await tester.ensureVisible(find.text('只买小食（结束当前搭配）'));
-    await tester.tap(find.text('只买小食（结束当前搭配）')); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('只买小食'));
+    await tester.tap(find.text('只买小食')); await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('自己选小食'));
     await tester.tap(find.text('自己选小食')); await tester.pumpAndSettle();
     expect(find.text('招牌红烧肉饭'), findsNothing);
     expect(find.text('加肉'), findsNothing);
     await tester.tap(find.text('卤豆干').first); await tester.pumpAndSettle();
     expect(find.text('已手选小食。'), findsOneWidget);
-    await tester.tap(find.text('餐品菜单')); await tester.pumpAndSettle(); expect(find.text('1666 个售卖项'), findsOneWidget);
+    await tester.tap(find.text('餐品菜单')); await tester.pumpAndSettle(); expect(find.text('1767 个菜品'), findsOneWidget);
     await tester.tap(find.text('店铺')); await tester.pumpAndSettle();
-    expect(find.text('9 家店铺'), findsOneWidget);
+    expect(find.text('10 家店铺'), findsOneWidget);
     expect(find.byKey(const ValueKey('sf-thumbnail')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('store-official:sf'))); await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('sf-cover')), findsOneWidget);
-    expect(find.text('228 个售卖项'), findsOneWidget);
+    expect(find.text('228 个菜品'), findsOneWidget);
     expect(find.text('小份牛肉面'), findsNothing);
     await tester.tap(find.text('返回全部店铺')); await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('store-official:jml')));
     await tester.tap(find.byKey(const ValueKey('store-official:jml'))); await tester.pumpAndSettle();
-    expect(find.text('29 个售卖项'), findsOneWidget);
+    expect(find.text('29 个菜品'), findsOneWidget);
     await tester.ensureVisible(find.text('小份牛肉面').first);
     await tester.tap(find.text('小份牛肉面').first); await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
     await tester.tap(find.text('关闭')); await tester.pumpAndSettle();
-    await tester.tap(find.text('菜单库')); await tester.pumpAndSettle(); expect(find.text('添加个人菜品'), findsOneWidget);
+    await tester.tap(find.text('菜单管理')); await tester.pumpAndSettle(); expect(find.text('添加个人菜品'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('updates are opt-in from settings without a launch prompt', (tester) async {
     await startApp(tester);
     expect(find.byType(AlertDialog), findsNothing);
     await tester.tap(find.byTooltip('设置')); await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('官方最新版本'));
-    await tester.tap(find.text('官方最新版本')); await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('检查更新'));
+    await tester.tap(find.text('检查更新')); await tester.pumpAndSettle();
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.textContaining('更新由你决定，不会自动安装'), findsOneWidget);
@@ -154,7 +154,7 @@ void main() {
     final original = r.official.encode();
     await r.replace(MenuDb(source: Source.personal, revision: 2, places: r.official.places, foods: r.official.foods, offers: r.official.offers));
     final reloaded = await MenuRepository.load();
-    expect(reloaded.personal.offers.length, 1634); expect(reloaded.official.encode(), original);
+    expect(reloaded.personal.offers.length, 1735); expect(reloaded.official.encode(), original);
   });
   test('old demo migrates without replacing personal data', () async {
     final demo = MenuDb.decode(File('test/fixtures/demo-v1.json').readAsStringSync(), Source.official);
@@ -164,7 +164,7 @@ void main() {
       'official': demo.encode(), 'personal': personal.encode(),
     })});
     final r = await MenuRepository.load();
-    expect(r.official.revision, 9);
+    expect(r.official.revision, 10);
     expect(r.personal.encode(), personal.encode());
   });
   test('an imported non-demo official library is preserved', () async {

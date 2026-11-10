@@ -15,6 +15,8 @@ class FailingPreferences implements SharedPreferences {
   @override
   String? getString(String key) => disk[key];
   @override
+  Object? get(String key) => disk[key];
+  @override
   Future<bool> setString(String key, String value) async {
     if (failNext) {
       failNext = false;

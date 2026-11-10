@@ -63,7 +63,7 @@ if (gallery) {
   });
 }
 
-const formatMegabytes = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+const formatMegabytes = (bytes) => `约 ${Math.round(bytes / 1000000)} MB`;
 
 fetch('release.json')
   .then((response) => {
@@ -72,7 +72,7 @@ fetch('release.json')
   })
   .then((release) => {
     const arm64 = release.assets.find((asset) => asset.abi === 'arm64-v8a');
-    const universal = release.assets.find((asset) => asset.abi.includes(','));
+    const universal = release.assets.find((asset) => asset.abi?.includes(','));
     if (!arm64 || !universal) throw new Error('release assets incomplete');
 
     document.querySelectorAll('[data-primary-download], [data-arm64-download]').forEach((link) => { link.href = arm64.url; });
@@ -98,7 +98,7 @@ if (copyButton && releaseLink && copyStatus) {
       copyStatus.textContent = '官网链接已复制。';
       copyButton.textContent = '已复制';
     } catch {
-      copyStatus.textContent = '浏览器未允许复制，请选择上方明文链接后手动复制。';
+      copyStatus.textContent = '浏览器未允许复制，请手动复制上面的链接后手动复制。';
       releaseLink.focus();
     }
   });

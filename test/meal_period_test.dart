@@ -42,7 +42,7 @@ void main() {
     final db=MenuDb.decode(File('assets/official.json').readAsStringSync(),Source.official);
     db.validate();
     expect(MenuDb.decode(db.encode(),Source.official).encode(),db.encode());
-    expect(db.offers.where((o)=>!{'wy','btk','btz'}.contains(o.placeId)).every((o)=>!o.mealPeriods.contains('breakfast')),isTrue);
+    expect(db.offers.where((o)=>!{'wy','btk','btz','mg'}.contains(o.placeId)).every((o)=>!o.mealPeriods.contains('breakfast')),isTrue);
     expect(db.offers.singleWhere((o)=>o.placeId=='wy' && o.name=='紫薯包').mealPeriods,{'breakfast'});
     expect(db.offers.singleWhere((o)=>o.placeId=='btk' && o.name=='早餐汉堡＋牛奶').available,isFalse);
     expect(db.offers.singleWhere((o)=>o.placeId=='btz' && o.name=='狗不理小笼包').mealPeriods,{'breakfast','lunch','dinner'});
@@ -81,16 +81,16 @@ void main() {
   testWidgets('first prompt saves manual breakfast, restart skips prompt, settings can change it', (tester) async {
     SharedPreferences.setMockInitialValues({});rootBundle.clear();
     await loadApp(tester);
-    expect(find.text('选择餐次方式'),findsOneWidget);
+    expect(find.text('选择用餐时间'),findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('meal-choice-breakfast')));
     await tester.tap(find.text('保存'));await tester.pumpAndSettle();
     expect(readMealChoice(await SharedPreferences.getInstance()),'breakfast');
     expect(find.textContaining('当前：早餐'),findsOneWidget);
     expect(find.byKey(const ValueKey('meal-category-rice')),findsNothing);
     await tester.pumpWidget(const SizedBox());await tester.pump();rootBundle.clear();
-    await loadApp(tester);expect(find.text('选择餐次方式'),findsNothing);
+    await loadApp(tester);expect(find.text('选择用餐时间'),findsNothing);
     await tester.tap(find.byTooltip('设置'));await tester.pumpAndSettle();
-    await tester.tap(find.text('餐次设置'));await tester.pumpAndSettle();
+    await tester.tap(find.text('用餐时间'));await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('meal-choice-dinner')));
     await tester.tap(find.byKey(const ValueKey('meal-choice-dinner')));
     await tester.tap(find.text('保存'));await tester.pumpAndSettle();
