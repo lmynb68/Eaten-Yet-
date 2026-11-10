@@ -9,6 +9,9 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Match the hosted source recorded in pubspec.lock; keep strict locking.
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
