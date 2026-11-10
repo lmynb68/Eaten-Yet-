@@ -13,8 +13,25 @@ def verify_files(directory, assets):
         path = directory / asset['name']
         if path.is_symlink() or not path.is_file() or path.stat().st_size != asset['bytes']:
             raise ValueError('Invalid APK size/type')
-        if hashlib.sha256(path.read_bytes()).hexdigest() != asset['sha256']:
+        with path.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if digest != asset['sha256']:
             raise ValueError('APK checksum mismatch')
+
+
+def write_json_atomic(path, value):
+    fd, temporary = tempfile.mkstemp(prefix='.release-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+            json.dump(value, stream, indent=2)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def activate(incoming, root):
@@ -42,9 +59,6 @@ def activate(incoming, root):
         if not re.fullmatch(r'[A-Za-z0-9.+_-]+\.apk', name) or name in names:
             raise ValueError('Invalid APK filename')
         names.add(name)
-        path = incoming / name
-        if path.is_symlink() or path.stat().st_size != asset['bytes']:
-            raise ValueError('Invalid APK size/type')
         if asset['url'] != f'downloads/build-{build}/{name}':
             raise ValueError('Unexpected download URL')
     downloads = root / 'downloads'
@@ -57,8 +71,11 @@ def activate(incoming, root):
         try:
             staging.chmod(0o755)
             for asset in manifest['assets']:
+                source = incoming / asset['name']
+                if source.is_symlink() or not source.is_file():
+                    raise ValueError('Invalid APK type')
                 target = staging / asset['name']
-                shutil.copyfile(incoming / asset['name'], target)
+                shutil.copyfile(source, target)
                 target.chmod(0o644)
             verify_files(staging, manifest['assets'])
             staging.rename(destination)
@@ -69,18 +86,8 @@ def activate(incoming, root):
         return
     # Files become visible first; the manifest is the final atomic switch.
     if old_file.exists():
-        shutil.copyfile(old_file, root / 'release.previous.json')
-    fd, temp = tempfile.mkstemp(prefix='.release-', dir=root)
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            json.dump(manifest, stream, indent=2)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temp, 0o644)
-        os.replace(temp, old_file)
-    finally:
-        if os.path.exists(temp):
-            os.unlink(temp)
+        write_json_atomic(root / 'release.previous.json', old)
+    write_json_atomic(old_file, manifest)
 
 if __name__ == '__main__':
     import fcntl

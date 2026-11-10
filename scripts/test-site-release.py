@@ -71,6 +71,65 @@ class ActivationTests(unittest.TestCase):
         self.assertEqual(json.loads((self.root / 'release.json').read_text()), self.old)
         self.assertFalse((self.root / 'downloads/build-27').exists())
 
+    def remove_uploaded_apks(self):
+        for asset in self.manifest['assets']:
+            (self.incoming / asset['name']).unlink()
+
+    def test_retry_without_upload_cache_keeps_rollback(self):
+        module.activate(self.incoming, self.root)
+        self.remove_uploaded_apks()
+        module.activate(self.incoming, self.root)
+        self.assertEqual(json.loads((self.root / 'release.previous.json').read_text()), self.old)
+        self.assertEqual(json.loads((self.root / 'release.json').read_text()), self.manifest)
+
+    def test_failed_backup_write_preserves_both_manifests(self):
+        backup = self.root / 'release.previous.json'
+        backup.write_text('{"tag": "v1.0.0+24"}')
+        previous = backup.read_bytes()
+
+        def interrupted_write(value, stream, **kwargs):
+            stream.write('{"partial":')
+            raise OSError('simulated full disk')
+
+        with patch.object(module.json, 'dump', side_effect=interrupted_write):
+            with self.assertRaisesRegex(OSError, 'full disk'):
+                module.activate(self.incoming, self.root)
+        self.assertEqual(backup.read_bytes(), previous)
+        self.assertEqual(json.loads((self.root / 'release.json').read_text()), self.old)
+        self.assertEqual(list(self.root.glob('.release-*')), [])
+
+    def test_retry_after_manifest_switch_failure(self):
+        replace = module.os.replace
+
+        def fail_manifest_switch(source, destination):
+            if Path(destination) == self.root / 'release.json':
+                raise OSError('simulated manifest switch failure')
+            return replace(source, destination)
+
+        with patch.object(module.os, 'replace', side_effect=fail_manifest_switch):
+            with self.assertRaisesRegex(OSError, 'switch failure'):
+                module.activate(self.incoming, self.root)
+        self.assertEqual(json.loads((self.root / 'release.json').read_text()), self.old)
+        self.assertEqual(list(self.root.glob('.release-*')), [])
+        self.remove_uploaded_apks()
+        module.activate(self.incoming, self.root)
+        self.assertEqual(json.loads((self.root / 'release.json').read_text()), self.manifest)
+        self.assertEqual(json.loads((self.root / 'release.previous.json').read_text()), self.old)
+
+    def test_retry_verifies_published_bytes_even_without_upload_cache(self):
+        module.activate(self.incoming, self.root)
+        self.remove_uploaded_apks()
+        asset = self.manifest['assets'][0]
+        (self.root / asset['url']).write_bytes(b'X' * asset['bytes'])
+        with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+            module.activate(self.incoming, self.root)
+        self.assertEqual(json.loads((self.root / 'release.previous.json').read_text()), self.old)
+
+    def test_hashing_does_not_read_whole_apk_into_memory(self):
+        with patch.object(Path, 'read_bytes', side_effect=AssertionError('whole-file read')):
+            module.activate(self.incoming, self.root)
+            module.activate(self.incoming, self.root)
+
     def test_same_size_source_change_during_copy_keeps_old_download(self):
         downloads = self.root / 'downloads'
         downloads.mkdir()

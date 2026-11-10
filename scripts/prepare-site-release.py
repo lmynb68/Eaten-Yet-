@@ -45,7 +45,8 @@ def prepare(folder, release, tools):
         if identity and identity != current:
             raise ValueError('APK versions differ')
         identity = current
-        digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+        with apk.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
         remote = next(a for a in release['assets'] if a['name'] == apk.name)
         if remote['size'] != apk.stat().st_size or remote.get('digest') != 'sha256:' + digest:
             raise ValueError('GitHub asset digest/size mismatch or missing digest')
