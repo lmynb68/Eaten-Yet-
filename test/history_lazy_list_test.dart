@@ -163,12 +163,16 @@ void main() {
     await tester.tap(find.text('导入用餐历史'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), backup([record(0)]));
+    await tester.tap(find.text('检查备份'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('导入'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('餐厅 0'), findsOneWidget);
     expect(find.text('还没有用餐历史。选好后点击“记录这一顿”。'), findsNothing);
     await tester.tap(find.text('导出用餐历史'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('复制内容'));
     await tester.pumpAndSettle();
     expect(HistoryStore.decode(copied!).single.id, 'record-0');
     expect(tester.takeException(), isNull);

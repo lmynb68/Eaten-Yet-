@@ -19,7 +19,7 @@
 
 新增用例的执行结果以对应提交的 CI 为准。模拟存储重新加载不等于手机杀进程重启，组件测试也不等于完整 E2E。
 
-辅助 CI 同时执行发布脚本、源码归档、菜单重建回归、网站静态检查和 PowerShell 语法检查。菜单重建在隔离目录生成候选结果，验证版本、完整记录和麦港 101 项菜品；`python docs/rebuild_catalog.py --check` 不写入正式菜单。
+辅助 CI 同时执行发布脚本、源码归档、菜单重建 Python 单元测试、网站静态检查和 PowerShell 语法检查。Android CI 安装 Flutter 后再运行 `scripts/test_catalog_decoder.py` 与 `python docs/rebuild_catalog.py --check`：在隔离目录重建候选结果，验证版本、完整记录和麦港 101 项菜品，并以真实 `MenuDb.decode()` 验证实际输出及编码往返；`--check` 不写入正式菜单。非法图片、分类、超限序列化或 Dart 无法运行时均停止，不以 Python 校验替代应用解码。
 
 ## 尚需设备执行的完整流程
 

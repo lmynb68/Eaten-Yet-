@@ -1,17 +1,78 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'backup_dialog.dart';
+import 'backup_import.dart';
 import 'history.dart';
 import 'language.dart';
 import 'domain.dart';
 
 Future<(int, String)?> showMealReview(BuildContext context,
-    {int initialStars = 0, String initialReview = ''}) async {
-  var stars = initialStars;
-  final text = TextEditingController(text: initialReview);
-  final result = await showDialog<(int, String)>(
+    {required Future<void> Function(int, String) onSave,
+    int initialStars = 0,
+    String initialReview = ''}) =>
+    showDialog<(int, String)>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-          builder: (ctx, refresh) => AlertDialog(
+      barrierDismissible: false,
+      builder: (_) => _MealReviewDialog(
+          onSave: onSave,
+          initialStars: initialStars,
+          initialReview: initialReview),
+    );
+
+class _MealReviewDialog extends StatefulWidget {
+  final Future<void> Function(int, String) onSave;
+  final int initialStars;
+  final String initialReview;
+  const _MealReviewDialog({
+    required this.onSave,
+    required this.initialStars,
+    required this.initialReview,
+  });
+
+  @override
+  State<_MealReviewDialog> createState() => _MealReviewDialogState();
+}
+
+class _MealReviewDialogState extends State<_MealReviewDialog> {
+  late final TextEditingController text =
+      TextEditingController(text: widget.initialReview);
+  late int stars = widget.initialStars;
+  bool saving = false;
+  String? error;
+
+  @override
+  void dispose() {
+    text.dispose();
+    super.dispose();
+  }
+
+  Future<void> save() async {
+    if (saving) return;
+    final review = text.text.trim();
+    if (review.characters.length > MealHistory.maxReviewCharacters) {
+      setState(() => error = '评价最多填写 2000 个字。');
+      return;
+    }
+    setState(() {
+      saving = true;
+      error = null;
+    });
+    try {
+      await widget.onSave(stars, review);
+      if (mounted) Navigator.pop(context, (stars, review));
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          saving = false;
+          error = '评价保存失败，内容已保留，请重试。';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+      canPop: !saving,
+      child: AlertDialog(
                   title: const LText('评价这一顿'),
                   content: SingleChildScrollView(
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -19,32 +80,35 @@ Future<(int, String)?> showMealReview(BuildContext context,
                     Wrap(children: [
                       for (var i = 1; i <= 5; i++)
                         IconButton(
-                            tooltip: tr(ctx, '{count} 星', params: {'count': i}),
-                            onPressed: () =>
-                                refresh(() => stars = stars == i ? 0 : i),
+                            tooltip: tr(context, '{count} 星', params: {'count': i}),
+                            onPressed: saving ? null : () =>
+                                setState(() => stars = stars == i ? 0 : i),
                             icon: Icon(
                                 i <= stars ? Icons.star : Icons.star_border))
                     ]),
                     TextField(
                         controller: text,
-                        maxLength: 2000,
+                        enabled: !saving,
+                        maxLength: MealHistory.maxReviewCharacters,
                         minLines: 2,
                         maxLines: 5,
                         decoration:
-                            InputDecoration(labelText: tr(ctx, '写下你的评价'))),
+                            InputDecoration(labelText: tr(context, '写下你的评价'))),
+                    if (error != null)
+                      Semantics(
+                          liveRegion: true,
+                          child: LText(error!,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error))),
                   ])),
                   actions: [
                     TextButton(
-                        onPressed: () => Navigator.pop(ctx),
+                        onPressed: saving ? null : () => Navigator.pop(context),
                         child: const LText('取消')),
                     FilledButton(
-                        onPressed: () =>
-                            Navigator.pop(ctx, (stars, text.text.trim())),
-                        child: const LText('保存'))
-                  ])));
-  // Wait for the dialog exit animation before disposing its controller.
-  Future<void>.delayed(const Duration(seconds: 1), text.dispose);
-  return result;
+                        onPressed: saving ? null : save,
+                        child: LText(saving ? '保存中…' : '保存'))
+                  ]));
 }
 
 class HistoryPage extends StatefulWidget {
@@ -72,26 +136,14 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> importHistory() async {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-                title: const LText('导入用餐历史'),
-                content: TextField(
-                    controller: controller,
-                    minLines: 3,
-                    maxLines: 8,
-                    decoration: InputDecoration(labelText: tr(ctx, '粘贴历史备份'))),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const LText('取消')),
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx, controller.text),
-                      child: const LText('导入'))
-                ]));
-    Future<void>.delayed(const Duration(seconds: 1), controller.dispose);
-    if (text != null) await act(() => widget.store.import(text));
+    final imported = await showBackupImportDialog<String>(context,
+      title: tr(context, '导入用餐历史'), inputLabel: '粘贴历史备份',
+      checkLabel: '检查备份', saveLabel: '导入', maxBytes: HistoryStore.maxBytes,
+      parse: (text) { HistoryStore.decode(text); return text; },
+      describe: (text) => tr(context, '已读取 {count} 条用餐记录',
+          params: {'count': HistoryStore.decode(text).length}),
+      onSave: widget.store.import);
+    if (imported == true && mounted) setState(() {});
   }
 
   @override
@@ -111,12 +163,10 @@ class _HistoryPageState extends State<HistoryPage> {
                         onPressed: busy
                             ? null
                             : () => act(() async {
-                                  await Clipboard.setData(ClipboardData(
-                                      text: widget.store.export()));
-                                  if (mounted)
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                            content: LText('历史备份已复制，请私下保存。')));
+                                  await showBackupExportDialog(context,
+                                      text: widget.store.export(),
+                                      name: 'eaten-yet-history.json',
+                                      diagnostic: widget.store.recoveryRequired);
                                 }),
                         child: const LText('导出用餐历史')),
                     TextButton(
@@ -186,10 +236,10 @@ class _HistoryPageState extends State<HistoryPage> {
                       : () async {
                           final value = await showMealReview(context,
                               initialStars: row.stars,
-                              initialReview: row.review);
-                          if (value != null)
-                            await act(() =>
-                                widget.store.edit(row.id, value.$1, value.$2));
+                              initialReview: row.review,
+                              onSave: (stars, review) =>
+                                  widget.store.edit(row.id, stars, review));
+                          if (value != null && mounted) setState(() {});
                         },
                   child: const LText('编辑评价')),
               TextButton(

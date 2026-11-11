@@ -5,13 +5,18 @@ writing. Restaurant import scripts are maintenance inputs, not release actions.
 """
 
 import argparse
+import base64
+import binascii
 from datetime import datetime
 import json
 import os
 from pathlib import Path
 import runpy
+import re
 import shutil
+import subprocess
 import tempfile
+from urllib.parse import unquote
 
 
 IMPORT_SCRIPTS = (
@@ -68,6 +73,21 @@ def _price(value, entry_id):
         raise RebuildError(f"Invalid price in entry {entry_id}")
 
 
+def _photo(row):
+    value = _text(row, "photo", allow_empty=True, default="")
+    if len(value) > 400000:
+        raise RebuildError(f"Photo too large in entry {row['id']}")
+    try:
+        # Dart accepts URL-safe, unpadded and percent-encoded Base64 as well.
+        normalized = unquote(value, encoding="ascii", errors="strict")
+        decoded = base64.b64decode(normalized + "=" * (-len(normalized) % 4), altchars=b"-_", validate=True)
+    except (ValueError, UnicodeError, binascii.Error) as error:
+        raise RebuildError(f"Invalid Base64 photo in entry {row['id']}") from error
+    if len(decoded) > 300000:
+        raise RebuildError(f"Photo too large in entry {row['id']}")
+    return len(value)
+
+
 def _validate_entries(candidate):
     """Basic types and associations must also hold for newly added records."""
     if type(candidate.get("schemaVersion")) is not int or candidate["schemaVersion"] not in (1, 2, 3, 4):
@@ -78,10 +98,11 @@ def _validate_entries(candidate):
     for name, limit in (("places", 200), ("foods", 2000), ("offers", 2000), ("ricePlans", 100)):
         if len(indexes[name]) > limit:
             raise RebuildError(f"Catalog exceeds {name} capacity")
+    photo_size = 0
     for place in indexes["places"].values():
         _text(place, "name")
         _text(place, "area", allow_empty=True)
-        _text(place, "photo", allow_empty=True, default="")
+        photo_size += _photo(place)
     for food in indexes["foods"].values():
         _text(food, "name")
     for offer in indexes["offers"].values():
@@ -89,6 +110,7 @@ def _validate_entries(candidate):
             _text(offer, key)
         for key in ("window", "notes", "evidence", "observedAt", "photo", "staple"):
             _text(offer, key, allow_empty=True, default="")
+        photo_size += _photo(offer)
         _price(offer.get("priceCents"), offer["id"])
         if offer["placeId"] not in indexes["places"]:
             raise RebuildError(f"Missing restaurant for offer {offer['id']}")
@@ -115,6 +137,8 @@ def _validate_entries(candidate):
             datetime.fromisoformat(offer["updatedAt"])
         except ValueError as error:
             raise RebuildError(f"Invalid date in offer {offer['id']}") from error
+    if photo_size > 10000000:
+        raise RebuildError("Catalog photos exceed total capacity")
     for plan in indexes["ricePlans"].values():
         for key in ("name", "location"):
             _text(plan, key)
@@ -142,6 +166,47 @@ def _validate_entries(candidate):
             _price(value, plan["id"])
         if prices and any(name not in prices for group in options for name in group):
             raise RebuildError(f"Missing dish price in plan {plan['id']}")
+        for key in ("dishTypes", "dishPhotos"):
+            values = plan.get(key, {})
+            if not isinstance(values, dict) or any(not isinstance(value, str) for value in values.values()):
+                raise RebuildError(f"Invalid {key} in plan {plan['id']}")
+        if any(value not in ("veg", "meat") for value in plan.get("dishTypes", {}).values()):
+            raise RebuildError(f"Invalid dishTypes in plan {plan['id']}")
+        if any(not re.fullmatch(r"assets/rice/dish_[0-9]{2}\.webp", value) for value in plan.get("dishPhotos", {}).values()):
+            raise RebuildError(f"Invalid dishPhotos in plan {plan['id']}")
+
+
+def dart_executable(explicit=None):
+    executable = explicit or os.environ.get("DART")
+    if not executable and os.environ.get("FLUTTER_ROOT"):
+        executable = str(Path(os.environ["FLUTTER_ROOT"]) / "bin" / "cache" / "dart-sdk" / "bin" / ("dart.exe" if os.name == "nt" else "dart"))
+    if not executable:
+        executable = shutil.which("dart")
+    if executable and Path(executable).suffix.lower() in (".bat", ".cmd"):
+        # Avoid invoking the Flutter batch wrapper through another shell.
+        native = Path(executable).parent / "cache" / "dart-sdk" / "bin" / "dart.exe"
+        if native.is_file():
+            executable = str(native)
+    if not executable:
+        raise RebuildError("Dart is required for application validation; pass --dart or set DART/FLUTTER_ROOT")
+    return executable
+
+
+def validate_with_app(path, *, dart=None):
+    """Validate the exact staged bytes with the application's own decoder."""
+    validator = Path(__file__).resolve().parents[1] / "scripts" / "validate_catalog.dart"
+    try:
+        result = subprocess.run(
+            [dart_executable(dart), str(validator), str(path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RebuildError(f"Application catalog validation could not run: {error}") from error
+    detail = (result.stderr or result.stdout).strip()[:1000]
+    if result.returncode == 1 and result.stderr.startswith("Application decoder FAIL:"):
+        raise RebuildError(f"Application catalog decoder rejected candidate (exit {result.returncode}): {detail}")
+    if result.returncode != 0 or not result.stdout.startswith("Application decoder PASS:"):
+        raise RebuildError(f"Application catalog validation could not complete (exit {result.returncode}): {detail}")
 
 
 def validate_candidate(current, candidate):
@@ -193,21 +258,16 @@ def build_candidate(root):
         return json.loads((stage / "assets" / "official.json").read_text(encoding="utf-8"))
 
 
-def rebuild(root, *, check_only=False):
+def rebuild(root, *, check_only=False, dart=None):
     root = Path(root).resolve()
     target = root / "assets" / "official.json"
     original = target.read_bytes()
     current = json.loads(original)
     candidate = build_candidate(root)
     validate_candidate(current, candidate)
-    if check_only:
-        if candidate != current:
-            raise RebuildError("Reconstruction differs from official.json; review it before updating")
-        return candidate
-    # Keep both bytes and timestamps intact when the reviewed content is equal.
-    if candidate == current:
-        return candidate
-    data = (json.dumps(candidate, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    # Equal content keeps its existing bytes; changed content uses the exact
+    # serialization which will be installed, including the decoder size limit.
+    data = original if candidate == current else (json.dumps(candidate, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(prefix=".official-", suffix=".json", dir=target.parent, delete=False) as file:
@@ -215,9 +275,14 @@ def rebuild(root, *, check_only=False):
             file.write(data)
             file.flush()
             os.fsync(file.fileno())
+        validate_with_app(temporary, dart=dart)
         # An editor/importer may have changed the reviewed catalog while we ran.
         if target.read_bytes() != original:
             raise RebuildError("official.json changed during reconstruction; retry after review")
+        if check_only and candidate != current:
+            raise RebuildError("Reconstruction differs from official.json; review it before updating")
+        if check_only or candidate == current:
+            return candidate
         os.replace(temporary, target)
     finally:
         if temporary is not None:
@@ -228,9 +293,10 @@ def rebuild(root, *, check_only=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Check only; never write official.json")
+    parser.add_argument("--dart", help="Dart executable path (otherwise DART, FLUTTER_ROOT, or PATH)")
     args = parser.parse_args()
     try:
-        result = rebuild(Path(__file__).resolve().parents[1], check_only=args.check)
+        result = rebuild(Path(__file__).resolve().parents[1], check_only=args.check, dart=args.dart)
     except (ValueError, OSError) as error:
         parser.exit(1, f"Catalog rebuild stopped; original file preserved: {error}\n")
     print(f"Catalog verified: revision {result['revision']}, {len(result['places'])} restaurants, {len(result['offers'])} offers")

@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'domain.dart';
 import 'photos.dart';
 import 'rice.dart';
+import 'recovery_data.dart';
 
 String riceDishKey(RicePlan plan, String name) => jsonEncode(['rice', plan.storeKey, plan.location, name]);
 
@@ -153,10 +154,7 @@ class FavoriteStore {
       await preferences.reload();
       // Pin this reset's source across retries, even if a failed native commit changed its cache.
       final raw = preferences.get(storageKey);
-      final original = _resetOriginal ??= raw == null ? null :
-          raw is String ? raw : raw is double && !raw.isFinite
-              ? jsonEncode({'type': 'double', 'value': raw.toString()})
-              : jsonEncode(raw);
+      final original = _resetOriginal ??= raw == null ? null : encodeRecoveryValue(raw);
       if (original != null) {
         const firstKey = '$storageKey.recovery';
         final first = preferences.get(firstKey);

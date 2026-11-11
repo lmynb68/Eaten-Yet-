@@ -1,10 +1,14 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'favorites.dart';
+import 'recovery_data.dart';
 
 class MealHistory {
+  // Match TextField.maxLength: visible characters, including combined emoji.
+  static const maxReviewCharacters = 2000;
   final String id;
   final FavoriteMeal meal;
   final int stars;
@@ -18,7 +22,7 @@ class MealHistory {
     return item;
   }
   void validate() {
-    if (id.isEmpty || id.length > 200 || stars < 0 || stars > 5 || review.length > 2000 ||
+    if (id.isEmpty || id.length > 200 || stars < 0 || stars > 5 || review.characters.length > maxReviewCharacters ||
         DateTime.tryParse(meal.savedAt) == null || meal.storeName.isEmpty || meal.items.isEmpty ||
         meal.items.length > 200 || meal.baseQuantity < 1 || meal.baseQuantity > 99 || meal.ricePrice < 0 || meal.ricePrice > 990000000 ||
         meal.items.any((i) => i.key.isEmpty || i.name.isEmpty || i.price < 0 || i.price > 10000000 || i.quantity < 1 || i.quantity > 99)) {
@@ -54,7 +58,7 @@ class HistoryStore {
       return HistoryStore._(preferences, raw == null ? [] : decode(raw as String), false);
     } catch (_) {
       return HistoryStore._(preferences, [], true)
-        .._recoveryRaw = raw is String ? raw : jsonEncode(raw);
+        .._recoveryRaw = encodeRecoveryValue(raw);
     }
   }
   String export() => recoveryRequired ? (_recoveryRaw ?? '') : _encode(_records);

@@ -50,7 +50,7 @@ function Invoke-Flutter([string[]]$Arguments) {
 }
 try {
   if ($Target -eq 'doctor') { Invoke-Flutter @('doctor','-v'); exit 0 }
-  if ($Online) { Invoke-Flutter @('pub','get') }
+  if ($Online) { Invoke-Flutter @('pub','get','--enforce-lockfile') }
   else { Invoke-Flutter @('pub','get','--offline','--enforce-lockfile') }
   $dart = Join-Path (Split-Path -Parent $Flutter) 'cache/dart-sdk/bin/dart.exe'
   $analysisLog = Join-Path $PSScriptRoot 'logs/analysis.log'

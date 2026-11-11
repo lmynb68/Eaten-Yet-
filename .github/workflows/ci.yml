@@ -33,6 +33,11 @@ jobs:
           flutter-version: '3.47.8'
           channel: stable
           cache: true
+      - name: Catalog rebuild and real application decoder regression
+        run: |
+          python3 scripts/test_catalog_decoder.py
+          python3 docs/rebuild_catalog.py --check
+        working-directory: ${{ runner.temp }}/eaten-yet-source
       - run: flutter pub get --enforce-lockfile
         working-directory: ${{ runner.temp }}/eaten-yet-source
       - run: flutter analyze --no-pub lib test
@@ -64,7 +69,6 @@ jobs:
       - run: python scripts/test-site-release.py
       - run: python scripts/test_archive_source.py
       - run: python scripts/test_catalog_rebuild.py
-      - run: python docs/rebuild_catalog.py --check
       - run: python scripts/check_site.py
       - name: Validate PowerShell syntax
         shell: pwsh

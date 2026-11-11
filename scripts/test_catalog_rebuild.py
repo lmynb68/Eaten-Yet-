@@ -17,7 +17,7 @@ sys.path.insert(0, str(REPO / "docs"))
 import rebuild_catalog as catalog
 
 
-class CatalogRebuildTests(unittest.TestCase):
+class CatalogFixture(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix=".catalog-test-", dir=REPO)
         self.addCleanup(self.directory.cleanup)
@@ -38,6 +38,16 @@ class CatalogRebuildTests(unittest.TestCase):
     def write_current(self, data):
         self.target.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
         return self.target.read_bytes()
+
+
+class CatalogRebuildTests(CatalogFixture):
+    def setUp(self):
+        super().setUp()
+        # Python-only safety tests also run in the CI job without Flutter/Dart.
+        # test_catalog_decoder.py separately exercises the real application.
+        self.validator_patch = patch.object(catalog, "validate_with_app")
+        self.validator = self.validator_patch.start()
+        self.addCleanup(self.validator_patch.stop)
 
     def test_full_rebuild_repeats_without_changing_reviewed_catalog(self):
         first = self.rebuild()
@@ -138,6 +148,7 @@ class CatalogRebuildTests(unittest.TestCase):
                     with self.assertRaises(catalog.RebuildError):
                         self.rebuild()
                 self.assertEqual(self.target.read_bytes(), self.original)
+
         for field, value in (("storeKey", "official:missing-store"), ("priceCents", -1), ("labels", [[], [], []])):
             with self.subTest(section="ricePlans", field=field):
                 candidate = copy.deepcopy(self.current)
@@ -149,6 +160,64 @@ class CatalogRebuildTests(unittest.TestCase):
                     with self.assertRaises(catalog.RebuildError):
                         self.rebuild()
                 self.assertEqual(self.target.read_bytes(), self.original)
+
+    def test_invalid_photo_and_rice_metadata_leave_original_untouched(self):
+        cases = (
+            ("places", "photo", "****"), ("offers", "photo", "****"),
+            ("offers", "photo", "A" * 400004),
+            ("ricePlans", "dishTypes", {"test": "fish"}),
+            ("ricePlans", "dishTypes", {"test": 2}),
+            ("ricePlans", "dishTypes", []),
+            ("ricePlans", "dishPhotos", {"test": "../outside.webp"}),
+            ("ricePlans", "dishPhotos", {"test": 2}),
+        )
+        for section, field, value in cases:
+            with self.subTest(section=section, field=field):
+                candidate = copy.deepcopy(self.current)
+                candidate["revision"] += 1
+                entry = copy.deepcopy(candidate[section][0])
+                entry.update({"id": "invalid-added-entry", field: value})
+                candidate[section].append(entry)
+                with patch.object(catalog, "build_candidate", return_value=candidate):
+                    with self.assertRaises(catalog.RebuildError):
+                        self.rebuild()
+                self.assertEqual(self.target.read_bytes(), self.original)
+
+    def test_application_decoder_must_pass_before_replace(self):
+        candidate = copy.deepcopy(self.current)
+        candidate["revision"] += 1
+
+        def reject_staged_file(path, **kwargs):
+            self.assertEqual(json.loads(path.read_bytes()), candidate)
+            self.assertEqual(self.target.read_bytes(), self.original)
+            raise catalog.RebuildError("decoder rejected candidate")
+
+        self.validator.side_effect = reject_staged_file
+        with patch.object(catalog, "build_candidate", return_value=candidate):
+            with self.assertRaisesRegex(catalog.RebuildError, "decoder rejected"):
+                self.rebuild()
+        self.assertEqual(self.target.read_bytes(), self.original)
+        self.assertEqual(list(self.target.parent.iterdir()), [self.target])
+
+    def test_check_and_equal_rebuild_still_require_application_validation(self):
+        self.rebuild(check_only=True)
+        self.rebuild()
+        self.assertEqual(self.validator.call_count, 2)
+
+    def test_missing_dart_and_decoder_failure_are_not_success(self):
+        with patch.dict(catalog.os.environ, {}, clear=True), patch.object(catalog.shutil, "which", return_value=None):
+            with self.assertRaisesRegex(catalog.RebuildError, "Dart is required"):
+                catalog.dart_executable()
+        # Call the original implementation because the fixture mocks rebuild's gate.
+        self.validator_patch.stop()
+        with patch.object(catalog.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "Application decoder FAIL: invalid catalog")):
+            with self.assertRaisesRegex(catalog.RebuildError, "rejected candidate"):
+                catalog.validate_with_app(self.target, dart="dart")
+        for result in (subprocess.CompletedProcess([], 3221225480, "", "VM failed"),
+                       subprocess.CompletedProcess([], 0, "", "")):
+            with patch.object(catalog.subprocess, "run", return_value=result):
+                with self.assertRaisesRegex(catalog.RebuildError, "could not complete"):
+                    catalog.validate_with_app(self.target, dart="dart")
 
     def test_valid_new_offer_with_new_revision_can_be_written(self):
         candidate = copy.deepcopy(self.current)

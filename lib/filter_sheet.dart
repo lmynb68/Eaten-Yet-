@@ -35,7 +35,7 @@ Future<BrowseFilters?> showBrowseFilters(BuildContext context, {
               onPressed: () => refresh(() => change(entry.key)), child: Text(translate || entry.key.isEmpty ? tr(context, entry.value) : entry.value, textAlign: TextAlign.center)),
           )]));
       final visibleStores = Map<String, String>.fromEntries(stores.entries.where((e) =>
-        draftScope == Scope.merged || e.key.startsWith(draftScope == Scope.official ? 'official:' : 'personal:')));
+        riceOnly || draftScope == Scope.merged || e.key.startsWith(draftScope == Scope.official ? 'official:' : 'personal:')));
       return SafeArea(top: false, child: ConstrainedBox(constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .86),
         child: Padding(padding: const EdgeInsets.fromLTRB(22, 0, 22, 18), child: Column(
           mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -52,7 +52,7 @@ Future<BrowseFilters?> showBrowseFilters(BuildContext context, {
             const SizedBox(height: 22), const LText('菜单范围', style: TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 10),
             options({'merged': '全部菜单', 'official': '官方菜单', 'personal': '我的菜单'}, draftScope.name, (v) {
               draftScope = Scope.values.byName(v);
-              if (draftStore != null && draftScope != Scope.merged && !draftStore!.startsWith('${draftScope.name}:')) draftStore = null;
+              if (!riceOnly && draftStore != null && draftScope != Scope.merged && !draftStore!.startsWith('${draftScope.name}:')) draftStore = null;
             }),
             if (advanced) Padding(padding: const EdgeInsets.only(top: 14), child: TextButton.icon(
               onPressed: () => Navigator.pop(sheetContext, BrowseFilters(draftScope, draftStaple, draftStore, advanced: true, clearMeals: clearMeals)),
