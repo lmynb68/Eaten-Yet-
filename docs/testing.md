@@ -2,7 +2,7 @@
 
 ## 自动回归
 
-`.github/workflows/ci.yml` 在每次 PR 和 main 推送执行静态分析及 `flutter test --no-pub`，随后检查安卓 debug 编译和正式签名缺失时拒绝构建。debug 编译不等于正式 APK 验收。
+`.github/workflows/ci.yml` 在每次 PR 和 main 推送先归档当前 Git 提交，在 Linux 解压后执行严格锁文件检查、静态分析及 `flutter test --no-pub`，随后检查安卓 debug 编译和正式签名缺失时拒绝构建。Flutter 固定为 3.47.8，依赖来源与锁文件保持一致。debug 编译不等于正式 APK 验收。
 
 | 范围 | 当前用例 |
 | --- | --- |
@@ -12,9 +12,14 @@
 | 保存失败（返回 false / 抛异常）、队列恢复 | save_failure_test.dart |
 | 损坏数据保留与恢复导出 | recovery_test.dart、release_reliability_test.dart |
 | 损坏收藏不阻断选餐、恢复提示可见 | app_test.dart |
+| 收藏原值类型错误、连续损坏、备份/重置失败重试及字段校验 | favorite_state_recovery_test.dart、favorite_limits_recovery_test.dart |
+| 餐次设置类型错误与界面修复 | meal_period_recovery_test.dart |
+| 历史记录恢复、评价与份数；2,000 条记录按需显示 | history_quantity_test.dart、history_quantity_widget_test.dart、history_lazy_list_test.dart |
 | 版本筛选、安装包下载失败与校验 | apk_update_test.dart、release_reliability_test.dart |
 
 新增用例的执行结果以对应提交的 CI 为准。模拟存储重新加载不等于手机杀进程重启，组件测试也不等于完整 E2E。
+
+辅助 CI 同时执行发布脚本、源码归档、菜单重建 Python 单元测试、网站静态检查和 PowerShell 语法检查。Android CI 安装 Flutter 后再运行 `scripts/test_catalog_decoder.py` 与 `python docs/rebuild_catalog.py --check`：在隔离目录重建候选结果，验证版本、完整记录和麦港 101 项菜品，并以真实 `MenuDb.decode()` 验证实际输出及编码往返；`--check` 不写入正式菜单。非法图片、分类、超限序列化或 Dart 无法运行时均停止，不以 Python 校验替代应用解码。
 
 ## 尚需设备执行的完整流程
 

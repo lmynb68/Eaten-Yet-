@@ -18,27 +18,75 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Match the hosted source recorded in pubspec.lock; keep strict locking.
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
     steps:
       - uses: actions/checkout@v7
+      - name: Archive and extract committed source on Linux
+        shell: bash
+        run: |
+          python3 scripts/archive_source.py --output "$RUNNER_TEMP/source-archive"
+          unzip -q "$RUNNER_TEMP"/source-archive/source-*.zip -d "$RUNNER_TEMP/eaten-yet-source"
+          test -x "$RUNNER_TEMP/eaten-yet-source/android/gradlew"
+          if grep -q $'\r' "$RUNNER_TEMP/eaten-yet-source/android/gradlew"; then
+            echo 'Archived gradlew must use LF line endings'
+            exit 1
+          fi
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.47.7'
+          flutter-version: '3.47.8'
           channel: stable
           cache: true
-      - run: flutter pub get
+      - name: Catalog rebuild and real application decoder regression
+        run: |
+          python3 scripts/test_catalog_decoder.py
+          python3 docs/rebuild_catalog.py --check
+        working-directory: ${{ runner.temp }}/eaten-yet-source
+      - run: flutter pub get --enforce-lockfile
+        working-directory: ${{ runner.temp }}/eaten-yet-source
       - run: flutter analyze --no-pub lib test
+        working-directory: ${{ runner.temp }}/eaten-yet-source
       - run: flutter test --no-pub
+        working-directory: ${{ runner.temp }}/eaten-yet-source
       - name: Android compilation check (not a release artifact)
         run: flutter build apk --debug --no-pub
+        working-directory: ${{ runner.temp }}/eaten-yet-source
       - name: Release must reject missing production signing configuration
         shell: bash
+        working-directory: ${{ runner.temp }}/eaten-yet-source
         run: |
           if flutter build apk --release --no-pub > release-check.log 2>&1; then
             echo 'Release unexpectedly succeeded without signing configuration'
             exit 1
           fi
           grep -F 'Release signing is required.' release-check.log
+  supporting-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: python scripts/test-site-release.py
+      - run: python scripts/test_archive_source.py
+      - run: python scripts/test_catalog_rebuild.py
+      - run: python scripts/check_site.py
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors.Count) { $errors | Write-Output; $failed = $true }
+          }
+          if ($failed) { exit 1 }

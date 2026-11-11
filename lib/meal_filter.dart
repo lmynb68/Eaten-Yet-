@@ -17,7 +17,7 @@ Future<Set<String>?> showMealFilter(BuildContext context, List<MealTarget> targe
     title: const LText('筛选店铺和主餐'),
     content: SizedBox(width: 560, height: MediaQuery.sizeOf(ctx).height * .6,
       child: Column(children: [
-        const LText('可多选店铺，或展开店铺勾选主餐；只从勾选项中手选和随机。'),
+        const LText('选择要参与的店铺和主餐。'),
         Wrap(spacing: 12, children: [
           TextButton(onPressed: () => refresh(() => draft.addAll(targets.map((e) => e.key))), child: const LText('全选')),
           TextButton(onPressed: () => refresh(draft.clear), child: const LText('清空选择')),

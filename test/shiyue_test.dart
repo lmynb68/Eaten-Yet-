@@ -29,7 +29,7 @@ void main() {
       'official':old.encode(),'personal':personal,'installedStores':['sf','jml'],
     })});
     final repo=await MenuRepository.load();
-    expect(repo.official.revision,9);
+    expect(repo.official.revision,10);
     expect(repo.official.places.any((p)=>p.id=='sy'),isTrue);
     expect(repo.installedStoreIds,{'sf','jml'});
     expect(repo.personal.encode(),personal);

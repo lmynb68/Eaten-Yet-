@@ -4,9 +4,10 @@ import 'domain.dart';
 import 'photos.dart';
 import 'language.dart';
 import 'favorites.dart';
+import 'quantity.dart';
 
-int mealCostWithSnack(Entry meal, Entry? snack) => meal.offer.priceCents +
-  (snack?.placeKey == meal.placeKey ? snack!.offer.priceCents : 0);
+int mealCostWithSnack(Entry meal, Entry? snack, {int quantity = 1, int snackQuantity = 1}) => meal.offer.priceCents * quantity +
+  (snack?.placeKey == meal.placeKey ? snack!.offer.priceCents * snackQuantity : 0);
 
 List<Entry> snackChoices(List<Entry> pool, int budget, int mainPrice, {String? placeKey}) => pool.where((e) =>
   (placeKey == null || e.placeKey == placeKey) && e.offer.kind == 'side' && !e.offer.addonOnly && e.offer.available &&
@@ -16,26 +17,29 @@ class SnackPanel extends StatelessWidget {
   final List<Entry> pool;
   final int? budget;
   final int mainPrice;
+  final int quantity;
+  final ValueChanged<int>? onQuantityChanged;
   final String placeKey;
   final Entry? selected;
   final ValueChanged<Entry?> onChanged;
   final double Function(Entry)? weight;
   const SnackPanel({super.key, required this.pool, required this.budget, required this.mainPrice,
-    required this.placeKey, required this.selected, required this.onChanged, this.weight});
+    required this.placeKey, required this.selected, required this.onChanged, this.weight, this.quantity = 1, this.onQuantityChanged});
   @override
   Widget build(BuildContext context) {
     final choices = snackChoices(pool, budget ?? 0, mainPrice, placeKey: placeKey);
     final current = selected?.placeKey == placeKey ? selected : null;
-    final total = mainPrice + (current?.offer.priceCents ?? 0);
+    final total = mainPrice + (current?.offer.priceCents ?? 0) * quantity;
     return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const LText('小食（可不选）', style: TextStyle(fontWeight: FontWeight.bold)),
-      Text('仅限同店：${pool.where((e) => e.placeKey == placeKey).firstOrNull?.place.name ?? placeKey}'),
+      const LText('小食', style: TextStyle(fontWeight: FontWeight.bold)),
+      Text('${pool.where((e) => e.placeKey == placeKey).firstOrNull?.place.name ?? placeKey}'),
       const SizedBox(height: 12),
       if (current != null) ListTile(contentPadding: EdgeInsets.zero,
         leading: DishPhoto(asset: dishAssetForEntry(selected!), data: selected!.offer.photo), title: Text(selected!.offer.name),
         subtitle: Text('${selected!.place.name} · ¥${money(selected!.offer.priceCents)}'),
         trailing: IconButton(tooltip: tr(context,'不选小食'), onPressed: () => onChanged(null), icon: const Icon(Icons.close))),
+      if (current != null && onQuantityChanged != null) QuantityPicker(value: quantity, onChanged: onQuantityChanged!),
       Wrap(spacing: 8, children: [
         TextButton(onPressed: () async {
           final picked = await showDialog<Entry>(context: context, builder: (ctx) => AlertDialog(

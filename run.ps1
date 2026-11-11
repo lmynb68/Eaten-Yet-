@@ -1,12 +1,21 @@
 ﻿param(
   [ValidateSet('check','doctor','android','android-release')][string]$Target='check',
   [string]$Flutter='',
-  [switch]$Online
+  [switch]$Online,
+  [string]$PubCache
 )
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $OutputEncoding=[Console]::OutputEncoding
+if ($PubCache) {
+  $cache = Get-Item -LiteralPath $PubCache -ErrorAction Stop
+  if (!$cache.PSIsContainer) { throw 'PubCache must be an existing directory.' }
+  $env:PUB_CACHE = $cache.FullName
+}
 Set-Location -LiteralPath $PSScriptRoot
+$localPubCache = Join-Path (Split-Path -Parent $PSScriptRoot) '.pub-cache'
+if (!$env:PUB_CACHE -and (Test-Path -LiteralPath $localPubCache)) { $env:PUB_CACHE = $localPubCache }
+if (!$env:PUB_HOSTED_URL) { $env:PUB_HOSTED_URL = 'https://pub.flutter-io.cn' }
 if (!$Flutter -and $env:FLUTTER_ROOT) { $Flutter=Join-Path $env:FLUTTER_ROOT 'bin\flutter.bat' }
 if (!$Flutter) {
   $found=Get-Command flutter -ErrorAction SilentlyContinue
@@ -41,9 +50,15 @@ function Invoke-Flutter([string[]]$Arguments) {
 }
 try {
   if ($Target -eq 'doctor') { Invoke-Flutter @('doctor','-v'); exit 0 }
-  if ($Online) { Invoke-Flutter @('pub','get') }
-  else { Invoke-Flutter @('pub','get','--offline') }
-  Invoke-Flutter @('analyze','--no-pub','lib','test')
+  if ($Online) { Invoke-Flutter @('pub','get','--enforce-lockfile') }
+  else { Invoke-Flutter @('pub','get','--offline','--enforce-lockfile') }
+  $dart = Join-Path (Split-Path -Parent $Flutter) 'cache/dart-sdk/bin/dart.exe'
+  $analysisLog = Join-Path $PSScriptRoot 'logs/analysis.log'
+  & $dart analyze --format machine lib test *> $analysisLog
+  $analysisExit = $LASTEXITCODE
+  Add-Content -LiteralPath $analysisLog -Value "exit=$analysisExit"
+  Get-Content -LiteralPath $analysisLog | Write-Host
+  if ($analysisExit -ne 0) { throw "Dart analyze failed ($analysisExit)." }
   Invoke-Flutter @('test','--no-pub')
   if ($Target -eq 'android') {
     Invoke-Flutter @('build','apk','--no-pub','--debug')
@@ -72,6 +87,10 @@ try {
         Copy-Item -LiteralPath $apk -Destination $file
         & (Join-Path $PSScriptRoot 'scripts/verify-apk.ps1') -Apk $file -Kind $kind
       }
+      $sums=Get-ChildItem -LiteralPath $stage -Filter '*.apk' | Sort-Object Name | ForEach-Object {
+        (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()+'  '+$_.Name
+      }
+      $sums | Set-Content -LiteralPath (Join-Path $stage 'SHA256SUMS') -Encoding ascii
       [IO.Directory]::Move($stage,$destination)
       Write-Host "Verified APKs: $destination"
     } finally {

@@ -20,9 +20,13 @@ class MainActivity : FlutterActivity() {
     private val updateDir get() = File(cacheDir, "updates")
     private val apk get() = File(updateDir, "update.apk")
     private var verifiedHash: String? = null
+    private lateinit var backups: BackupDocuments
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        backups = BackupDocuments(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "local.eatwhat.campus/backup")
+            .setMethodCallHandler(backups)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "local.eatwhat.campus/update")
             .setMethodCallHandler { call, result ->
                 try {
@@ -85,6 +89,17 @@ class MainActivity : FlutterActivity() {
                     }
                 } catch (e: Exception) { result.error("UPDATE", e.message, null) }
             }
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (::backups.isInitialized && backups.onActivityResult(requestCode, resultCode, data)) return
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onDestroy() {
+        if (::backups.isInitialized) backups.close()
+        super.onDestroy()
     }
 
     private fun hashFile(): String {

@@ -56,6 +56,6 @@ void main() {
   test('plan roundtrip validates and bounded search does not claim impossibility', () {
     final copy=RicePlan.fromJson(plan.toJson()); copy.validate();
     expect(copy.options,plan.options);
-    expect(randomRice(plan,1100,[null,null,null],{},Random(),limit:1).message,contains('搜索达到上限'));
+    expect(randomRice(plan,1100,[null,null,null],{},Random(),limit:1).message,contains('已保留当前选择'));
   });
 }

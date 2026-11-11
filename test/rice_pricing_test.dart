@@ -42,7 +42,7 @@ void main() {
       'official':old.encode(),'personal':personal,'installedStores':['jml'],
     })});
     final r=await MenuRepository.load();
-    expect(r.official.revision,9); expect(r.personal.encode(),personal);
+    expect(r.official.revision,10); expect(r.personal.encode(),personal);
     expect(r.activeOfficial.ricePlans,isEmpty);
     await r.setStoreInstalled('sf',true);
     expect(r.activeOfficial.ricePlans.single.dishPrices.length,32);

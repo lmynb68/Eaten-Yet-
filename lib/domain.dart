@@ -79,8 +79,13 @@ class MenuDb {
   const MenuDb({required this.source, required this.revision, required this.places,
     required this.foods, required this.offers, this.ricePlans = const []});
   factory MenuDb.empty(Source source) => MenuDb(source: source, revision: 1, places: [], foods: [], offers: []);
+  static const maxJsonLength = 12000000;
   factory MenuDb.decode(String text, Source expected) {
-    if (text.length > 12000000) throw const FormatException('数据包超过 12 MB');
+    if (text.length > maxJsonLength) throw const FormatException('数据包超过 12 MB');
+    return MenuDb.fromStoredJson(text, expected);
+  }
+  /// Only for previously saved local menus. External imports must use decode.
+  factory MenuDb.fromStoredJson(String text, Source expected) {
     final j = jsonDecode(text) as Map<String, dynamic>;
     if (![1, 2, 3, 4].contains(j['schemaVersion']) || j['source'] != expected.name) {
       throw const FormatException('数据版本或库类型不匹配');
@@ -105,7 +110,7 @@ class MenuDb {
     for (final plan in ricePlans) { plan.validate(); }
     ids(places.map((e) => e.id).toList()); ids(foods.map((e) => e.id).toList()); ids(offers.map((e) => e.id).toList());
     if (revision < 1 || offers.length > 2000 || places.length > 200 || foods.length > 2000) {
-      throw const FormatException('版本无效或超过菜单容量（2000 个售卖项）');
+      throw const FormatException('版本无效或超过菜单容量（2000 个菜品）');
     }
     if (places.any((p) => p.name.trim().isEmpty) || foods.any((f) => f.name.trim().isEmpty)) {
       throw const FormatException('店铺或食材名称为空');
@@ -128,7 +133,7 @@ class MenuDb {
       }
     }
   }
-  String encode() => const JsonEncoder.withIndent('  ').convert({'schemaVersion': ricePlans.any((p) => p.pricedByDish) ? 4 : 3,
+  String encode({bool compact = false}) => (compact ? const JsonEncoder() : const JsonEncoder.withIndent('  ')).convert({'schemaVersion': ricePlans.any((p) => p.pricedByDish) ? 4 : 3,
     'ricePlans': ricePlans.map((p) => p.toJson()).toList(),
     'source': source.name, 'revision': revision, 'places': places.map((e) => e.toJson()).toList(),
     'foods': foods.map((e) => e.toJson()).toList(), 'offers': offers.map((e) => e.toJson()).toList()});

@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'language.dart';
 
 const navigationIds = ['meal', 'catalog', 'stores', 'libraries', 'favorites'];
-const navigationLabels = ['搭一顿', '餐品菜单', '店铺', '菜单库', '我的喜爱'];
+const navigationLabels = ['搭一顿', '餐品菜单', '店铺', '菜单管理', '我的喜爱'];
 const navigationIcons = [
   Icons.shuffle, Icons.restaurant_menu, Icons.storefront, Icons.storage, Icons.favorite,
 ];

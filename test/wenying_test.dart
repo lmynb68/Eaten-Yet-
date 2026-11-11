@@ -14,6 +14,6 @@ void main() {
     expect(rows.where((o)=>o.name=='米饭').every((o)=>o.kind=='side'),isTrue);
     expect(rows.where((o)=>o.addonOnly).every((o)=>o.kind=='side'),isTrue);
     final old=MenuDb.decode(File('docs/catalog-before-wenying.json').readAsStringSync(),Source.official);
-    expect(db.offers.where((o)=>o.placeId!='wy' && o.placeId!='btk' && o.placeId!='btz' && o.placeId!='fw' && o.placeId!='zxb').map((o)=>o.id).toList(),old.offers.map((o)=>o.id).toList());
+    expect(db.offers.where((o)=>o.placeId!='wy' && o.placeId!='btk' && o.placeId!='btz' && o.placeId!='fw' && o.placeId!='zxb' && o.placeId!='mg').map((o)=>o.id).toList(),old.offers.map((o)=>o.id).toList());
   });
 }
